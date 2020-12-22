@@ -4,10 +4,6 @@ from math import log
 import string
 import re
 
-"""
-Best evolved solutions:
-1. S{500,300,500}, P{0.2,0.4,0.7,0.9,0.6},10G: '\w+\d[^R-h]\d\w??\D\D' - 0.0
-"""
 
 # constants
 RAND = -1
@@ -19,16 +15,16 @@ SUPPRESS_ROOT_CHARS = True
 DISPLAY_MESSAGES = True
 
 # settings
+MAX_GEN = 500
 POP_SIZE = 500
 SIZE_DATASET = 300
-MAX_GEN = 500
 
 # parameters
 MUTATION_RATE = 0.2
 CROSSOVER_RATE = 0.4
-P_EXP = 0.7
 P_NEW_UPPER = 0.9
 P_NEW_LOWER = 0.6
+P_EXP = 0.7
 
 CHAR_SETS = {
     "alpha_upper": string.ascii_uppercase,
@@ -337,7 +333,7 @@ class GeneticAlgorithm:
         for i in range(max_gen):
             scores = self.rank_population()
             if verbose:
-                print(i, scores[0][0], scores[0][1].display(), pnew)
+                print(i, round(scores[0][0], 4), scores[0][1].display(), round(pnew, 4))
             if scores[0][0] == 0:
                 break
 
