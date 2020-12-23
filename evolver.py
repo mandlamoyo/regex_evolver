@@ -17,30 +17,45 @@ P_NEW_UPPER = 0.9
 P_NEW_LOWER = 0.6
 P_EXP = 0.7
 
+P_MODIFIER = 0.1
+P_EXTEND = 0.76
+
 # constants
 RAND = -1
 MAX_WORDS = 5
 MAX_CHILDREN = 5
 MAX_COMPILE_MUTLIPLE = 5
-P_MODIFIER = 0.1
-P_EXTEND = 0.76
-SUPPRESS_ROOT_CHARS = True
-DISPLAY_MESSAGES = True
 
+DOT_ALL = False  # wildcard matches newlines
+SUPPRESS_ROOT_CHARS = True  # character constants can only be generated as node children
+DISPLAY_MESSAGES = True
+WHITESPACE_CHARS = string.whitespace  # [" ", "\t", "\n", "\r", "\f", "\v"]
+NON_META_SYMBOL_CHARS = "'!\"£-~#%&@:;<>/,"
+META_CHARS = r".^$*+?{}[]\|()\\"
 CHAR_SETS = {
     "alpha_upper": string.ascii_uppercase,
     "alpha_lower": string.ascii_lowercase,
     "alpha": string.ascii_letters,
     "alphanum": string.digits + string.ascii_letters,
-    "num": string.digits,
+    "digit": string.digits,
     "printable": string.printable,
 }
 
 
+class InvalidRegexError(Exception):
+    """Raised when an invalid regex has been specified"""
+
+    pass
+
+
 # Regex wrapper display functions
 def d_set(l, invert=False):
-    l = [l[0]] + list(filter(lambda child: child.name != "printable(-)", l[1:]))
-    display = "".join([v.display() for v in l])
+    def escape_nonrange_hyphen(displayed):
+        if displayed == "-":
+            displayed = r"\-"
+        return displayed
+
+    display = "".join([escape_nonrange_hyphen(v.display()) for v in l])
     if invert:
         display = "^" + display
     return f"[{display}]"
@@ -60,7 +75,7 @@ def d_count2(l):
 
 
 def d_or(l):
-    return l[0].display() + "|" + l[1].display()
+    return "(" + l[0].display() + "|" + l[1].display() + ")"
 
 
 def d_range(l):
@@ -73,18 +88,60 @@ def _d(v):
 
 
 # Regex wrapper compile functions
-def invert_compile(values, char_set="printable"):
+
+
+def invert_set(values, char_set="printable"):
     if not isinstance(values, list):
         values = list(values)
-    return choice(list(set(CHAR_SETS[char_set]) - set(values)))
+    return list(set(CHAR_SETS[char_set]) - set(values))
+
+
+def expand_set(node):
+    char_set = []
+    # for n in l:
+
+    if node.name == "range":
+        range_boundaries = sorted([ord(c.compile()) for c in node.children])
+        for i in range(*range_boundaries):
+            char_set.extend([chr(i)])
+        char_set.append(chr(range_boundaries[1]))
+
+    elif node.re_type.is_type_name("cset"):
+        if "digit" in node.name:
+            char_set.extend([v for v in CHAR_SETS["digit"]])
+
+        elif "whitespace" in node.name:
+            char_set.extend(WHITESPACE_CHARS)
+
+        elif "word" in node.name:
+            char_set.extend([v for v in CHAR_SETS["alphanum"] + "_"])
+
+        if "!" in node.name:
+            char_set = invert_set(char_set)
+    else:
+        char_set.append(node.compile())
+    return list(set(char_set))
+
+
+def expand_sets(l):
+    values = []
+    for node in l:
+        values.extend(expand_set(node))
+    return list(set(values))
 
 
 def c_set(l):
-    return choice([v.compile() for v in l])
+    char_set = expand_sets(l)
+    if not char_set:
+        raise InvalidRegexError(f"Invalid set ({l})")
+    return choice(char_set)
 
 
 def c_nset(l):
-    return invert_compile([v.compile() for v in l])
+    char_set = invert_set(expand_sets(l))
+    if not char_set:
+        raise InvalidRegexError(f"Invalid set inversion ({l})")
+    return choice(char_set)
 
 
 def c_count(l, compiled):
@@ -104,6 +161,8 @@ def c_range(l):
 
 
 def c_wildcard():
+    if not DOT_ALL:
+        return choice(invert_set(["\n"]))
     return choice(CHAR_SETS["printable"])
 
 
@@ -126,23 +185,24 @@ def c_not_greedy(compiled, params):
 
 
 def c_whitespace():
-    return choice([" ", "\t", "\n", "\r", "\f", "\v"])
+    w = choice(WHITESPACE_CHARS)
+    return w
 
 
 def c_nwhitespace():
-    return invert_compile([" ", "\t", "\n", "\r", "\f", "\v"])
+    return choice(invert_set(WHITESPACE_CHARS))
 
 
 def c_empty():
     return ""
 
 
-def c_decimal():
-    return choice(CHAR_SETS["num"])
+def c_digit():
+    return choice(CHAR_SETS["digit"])
 
 
-def c_ndecimal():
-    return invert_compile(CHAR_SETS["num"])
+def c_ndigit():
+    return choice(invert_set(CHAR_SETS["digit"]))
 
 
 def c_word():
@@ -150,7 +210,7 @@ def c_word():
 
 
 def c_nword():
-    return invert_compile(CHAR_SETS["alphanum"] + "_")
+    return choice(invert_set(CHAR_SETS["alphanum"] + "_"))
 
 
 # Classes
@@ -176,14 +236,28 @@ class ReType:
     def init_types():
         ReType.c.add(ReType("re"))
         ReType.c.add(ReType("mod"))
-        ReType.c.add(ReType("num", is_modifiable=False))
+        ReType.c.add(ReType("dec+", is_modifiable=False))
         ReType.c.add(ReType("range", is_modifiable=False))
-        ReType.c.add(ReType("char", ReType.c.get("re")))
         ReType.c.add(ReType("cset", ReType.c.get("re")))
         ReType.c.add(ReType("cset*", ReType.c.get("re"), is_modifiable=False))
-        ReType.c.add(ReType("printable", ReType.c.get("char")))
+        ReType.c.add(ReType("printable", ReType.c.get("re")))
         ReType.c.add(ReType("alphanum", ReType.c.get("printable")))
+        ReType.c.add(ReType("digit", ReType.c.get("alphanum")))
+        ReType.c.add(ReType("alpha", ReType.c.get("alphanum")))
+        ReType.c.add(ReType("alpha_upper", ReType.c.get("alpha")))
+        ReType.c.add(ReType("alpha_lower", ReType.c.get("alpha")))
         ReType.c.add(ReType("mmod", ReType.c.get("mod"), is_modifiable=False))
+
+    @staticmethod
+    def is_of(instance_name, of_name):
+        return ReType.c.get(instance_name).is_type_name(of_name)
+
+    @staticmethod
+    def is_one_of(instance_name, of_names):
+        for name in of_names:
+            if ReType.is_of(instance_name, name):
+                return True
+        return False
 
     def __init__(self, name, parent_retype=None, is_modifiable=True):
         self.name = name
@@ -196,13 +270,13 @@ class ReType:
             parent_name = self.parent.name
         return f"T: {self.name} ({parent_name}, mod:{self.is_modifiable})"
 
-    def is_type(self, re_type):
+    def is_type(self, re_type, strict=False):
         return self.name == re_type.name or (
-            self.parent and self.parent.is_type(re_type)
+            not strict and self.parent and self.parent.is_type(re_type)
         )
 
-    def is_type_name(self, type_name):
-        if self.parent:
+    def is_type_name(self, type_name, strict=False):
+        if not strict and self.parent:
             return self.name == type_name or self.parent.is_type_name(type_name)
         return self.name == type_name
 
@@ -234,19 +308,29 @@ class ReWrapper:
     def init_wrappers():
         ReWrapper.wrappers.clear()
 
-        for s in CHAR_SETS["alphanum"]:
-            ReWrapper.add_wrapper(ReWrapper(f"alphanum({s})", _d(s), "alphanum"))
+        for s in CHAR_SETS["digit"]:
+            ReWrapper.add_wrapper(ReWrapper(f"digit({s})", _d(s), "digit"))
 
-        for s in "'!\"£-~#%&@:;<>/,":
+        for s in CHAR_SETS["alpha_upper"]:
+            ReWrapper.add_wrapper(ReWrapper(f"alpha_upper({s})", _d(s), "alpha_upper"))
+
+        for s in CHAR_SETS["alpha_lower"]:
+            ReWrapper.add_wrapper(ReWrapper(f"alpha_lower({s})", _d(s), "alpha_lower"))
+
+        for s in NON_META_SYMBOL_CHARS:
             ReWrapper.add_wrapper(ReWrapper(f"printable({s})", _d(s), "printable"))
 
-        for n in "123456789":
-            ReWrapper.add_wrapper(ReWrapper(f"num({n})", _d(n), "num"))
+        for n in CHAR_SETS["digit"]:
+            ReWrapper.add_wrapper(ReWrapper(f"dec({n})", _d(n), "dec+"))
 
-        metachars = r".^$*+?{}[]\|()"
-        for m in metachars:
+        for m in META_CHARS:
             ReWrapper.add_wrapper(
-                ReWrapper(f"char({m})", _d(r"\%s" % m), "char", compile_function=_d(m))
+                ReWrapper(
+                    f"printable({m})",
+                    _d(r"\%s" % m),
+                    "printable",
+                    compile_function=_d(m),
+                )
             )
 
         #  display function, it's type(s), the type(s) it takes (opt), number of inputs
@@ -256,33 +340,35 @@ class ReWrapper:
                     "range",
                     d_range,
                     "range",
-                    ["alphanum"],
+                    ["digit", "alpha_upper", "alpha_lower"],
                     2,
                     compile_function=c_range,
                     strip_child_mods=True,
+                    uniform_child_types=True,
                 ),
                 ReWrapper(
                     "set",
                     d_set,
                     "re",
-                    ["char", "range", "cset"],
+                    ["printable", "range", "cset"],
                     RAND,
                     compile_function=c_set,
+                    strip_child_mods=True,
                 ),
                 ReWrapper(
                     "!set",
                     d_nset,
                     "re",
-                    ["char", "range", "cset"],
+                    ["printable", "range", "cset"],
                     RAND,
                     compile_function=c_nset,
                     strip_child_mods=True,
                 ),
                 ReWrapper(
-                    "count", d_count, "mod", ["num"], 1, compile_function=c_count
+                    "count", d_count, "mod", ["dec+"], 1, compile_function=c_count
                 ),
                 ReWrapper(
-                    "count2", d_count2, "mod", ["num"], 2, compile_function=c_count2
+                    "count2", d_count2, "mod", ["dec+"], 2, compile_function=c_count2
                 ),
                 ReWrapper(
                     "or",
@@ -306,8 +392,8 @@ class ReWrapper:
                 ),
                 ReWrapper("emptyterm", _d(r"\b"), "cset*", compile_function=c_empty),
                 ReWrapper("emtpy!term", _d(r"\B"), "cset*", compile_function=c_empty),
-                ReWrapper("decimal", _d(r"\d"), "cset", compile_function=c_decimal),
-                ReWrapper("!decimal", _d(r"\D"), "cset", compile_function=c_ndecimal),
+                ReWrapper("digit", _d(r"\d"), "cset", compile_function=c_digit),
+                ReWrapper("!digit", _d(r"\D"), "cset", compile_function=c_ndigit),
                 ReWrapper("word", _d(r"\w"), "cset", compile_function=c_word),
                 ReWrapper("!word", _d(r"\W"), "cset", compile_function=c_nword),
                 ReWrapper("space", _d(r" "), "printable"),
@@ -324,6 +410,7 @@ class ReWrapper:
         is_modifiable=True,
         compile_function=None,
         strip_child_mods=False,
+        uniform_child_types=False,
     ):
         self.name = name
         self.display_function = display_function
@@ -333,9 +420,10 @@ class ReWrapper:
         self.re_type = ReType.c.get(re_type)
         self.is_modifiable = self.re_type.is_modifiable and is_modifiable
         self.strip_child_mods = strip_child_mods
+        self.uniform_child_types = uniform_child_types
 
     def __repr__(self):
-        return f"RW: {self.name}({self.child_count}, mod:{self.is_modifiable})"
+        return f"ReWrapper: {self.name}(children:{self.child_count}, mod:{self.is_modifiable})"
 
     def get_child_count(self):
         if self.child_count == RAND:
@@ -345,11 +433,23 @@ class ReWrapper:
 
 class ReNode:
     @staticmethod
-    def make_node(rw_name=None, children=RAND, modifier=None, rw=None, is_child=False):
+    def make_node(
+        rw_name=None,
+        children=RAND,
+        modifier=None,
+        rw=None,
+        is_child=False,
+        omit_types=None,
+        omit_wrappers=None,
+        strict_type_match=False,
+    ):
         """
         children format: [{'rw_name': regex_wrapper_name, 'children': [<children>]})]
         modifier format: {'rw_name': <modifier_name>, 'children': <children>, 'modifier': <modifier>}
         """
+        omit_types = omit_types or []
+        omit_wrappers = omit_wrappers or []
+
         if not rw:
             if not rw_name:
                 raise ValueError("must provide regex wrapper object or name")
@@ -359,29 +459,65 @@ class ReNode:
         child_nodes = []
         if rw.child_count != 0:
             if children == RAND:
+                child_types = list(
+                    filter(
+                        lambda type_name: not ReType.is_one_of(type_name, omit_types),
+                        rw.child_types,
+                    )
+                )
+
+                # print("> ", rw)
+                # print(">> ", omit_types)
+                # print(">>> ", child_types)
+
+                if rw.uniform_child_types:
+                    child_types = sample(rw.child_types, 1)
                 child_nodes = [
-                    ReNode.make_random_node(choice(rw.child_types), is_child=True)
+                    ReNode.make_random_node(
+                        choice(child_types),
+                        is_child=True,
+                        omit_types=omit_types,
+                        omit_wrappers=omit_wrappers,
+                    )
                     for i in range(rw.get_child_count())
                 ]
             else:
                 for child in children:
-                    child_nodes.append(ReNode.make_node(**child, is_child=True))
+                    child_nodes.append(
+                        ReNode.make_node(
+                            **child,
+                            is_child=True,
+                            omit_types=omit_types,
+                            omit_wrappers=omit_wrappers,
+                        )
+                    )
 
         node = ReNode(rw, child_nodes, is_child)
         if rw.is_modifiable:
             if modifier == RAND:
-                print("- ", node.name)
-                print("- ", rw.name)
-                print("- ", rw.re_type)
-                print("- ", rw.re_type.is_type_name("mod"))
+                # print("- ", node.name)
+                # print("- ", rw.name)
+                # print("- ", rw.re_type)
+                # print("- ", rw.re_type.is_type_name("mod"))
+
+                # if wrapper is not a modifier, build a modifier. Otherwise, build mod-modifier.
                 mod_type = "mmod" if rw.re_type.is_type_name("mod") else "mod"
-                print("- ", mod_type)
-                omit_types = ["mmod"] if mod_type == "mod" else []
-                modifier = ReNode.make_random_node(mod_type, omit_types=omit_types)
-                print("-- ", modifier)
+                # print("- ", mod_type)
+                # if mod_type (to make) is mod, then don't build an mmod
+                # omit_types += ["mmod"] if mod_type == "mod" else []
+                # print(">> ", omit_types)
+                if mod_type not in omit_types:
+                    modifier = ReNode.make_random_node(
+                        mod_type,
+                        omit_types=omit_types,
+                        omit_wrappers=omit_wrappers,
+                        strict_type_match=True,
+                    )
+                    node.set_modifier(modifier)
+                # print("-- ", modifier)
             elif modifier:
                 modifier = ReNode.make_node(**modifier)
-            node.set_modifier(modifier)
+                node.set_modifier(modifier)
 
         return node
 
@@ -392,24 +528,37 @@ class ReNode:
         prob_modifier=P_MODIFIER,
         omit_types=None,
         omit_wrappers=None,
+        strict_type_match=False,
     ):
         omit_types = omit_types or []
         omit_wrappers = omit_wrappers or []
         re_type = ReType.c.get(type_name)
-        if not is_child and SUPPRESS_ROOT_CHARS:
-            omit_types.append("char")
 
         # filter ReWrapper.wrappers with items that match re_type
         filtered_wrappers = list(
-            filter(lambda rw: rw.re_type.is_type(re_type), ReWrapper.wrappers.values())
+            filter(
+                lambda rw: rw.re_type.is_type(re_type, strict=strict_type_match),
+                ReWrapper.wrappers.values(),
+            )
         )
 
+        # filter out types specified for omission in node generation
         for omit in omit_types:
             omit_type = ReType.c.get(omit)
             filtered_wrappers = list(
                 filter(lambda rw: not rw.re_type.is_type(omit_type), filtered_wrappers)
             )
 
+        # filter out characters if is root node and suppression parameter specified
+        if not is_child and SUPPRESS_ROOT_CHARS:
+            filtered_wrappers = list(
+                filter(
+                    lambda rw: not rw.re_type.is_type(ReType.c.get("printable")),
+                    filtered_wrappers,
+                )
+            )
+
+        # filter out wrappers specified for omission in node generation
         for omit in omit_wrappers:
             filtered_wrappers = list(
                 filter(lambda rw: rw.name != omit, filtered_wrappers)
@@ -420,10 +569,16 @@ class ReNode:
         if rw.is_modifiable and random() < prob_modifier:
             modifier = RAND
 
-        return ReNode.make_node(rw=rw, modifier=modifier, is_child=is_child)
+        return ReNode.make_node(
+            rw=rw,
+            modifier=modifier,
+            is_child=is_child,
+            omit_types=omit_types,
+            omit_wrappers=omit_wrappers,
+        )
 
     def __init__(self, rw, children, is_child):
-        self.next = None
+        self.next = None  # TODO: remove?
         self.name = rw.name
         self.modifier = None
         self.assertion = None
@@ -576,7 +731,14 @@ class ReNodeSet:
         return "".join([node.display() for node in self.nodes])
 
     def compile(self):
-        return "".join([node.compile() for node in self.nodes])
+        try:
+            return "".join([node.compile() for node in self.nodes])
+        except InvalidRegexError as e:
+            print(f"{self.display()} is an invalid regex")
+            print(e)
+            return None
+        except:
+            raise
 
     def mutate(self, prob_change):
         new_nodes = [node.mutate(prob_change) for node in self.nodes]
@@ -754,12 +916,12 @@ def gen_test_match(regex):
     pc = choice(CHAR_SETS["alpha"])
     if random() < 0.5:
         pc += choice(CHAR_SETS["alpha"])
-    pc += choice(CHAR_SETS["num"])
+    pc += choice(CHAR_SETS["digit"])
     if random() < 0.5:
-        pc += choice(CHAR_SETS["num"])
+        pc += choice(CHAR_SETS["digit"])
     pc += (
         " "
-        + choice(CHAR_SETS["num"])
+        + choice(CHAR_SETS["digit"])
         + choice(CHAR_SETS["alpha"])
         + choice(CHAR_SETS["alpha"])
     )
@@ -844,6 +1006,11 @@ def gen_random_params():
     }
 
 
+# Tests
+def test():
+    pass
+
+
 ReType.init_types()
 ReWrapper.init_wrappers()
 
@@ -864,7 +1031,7 @@ if __name__ == "__main__":
     #         ],
     #         ["!set", [["range", ["alphanum(c)", "alphanum(n)"]]]],
     #         "word",
-    #         ["!decimal", ["count2", ["num(4)", "num(9)"]]],
+    #         ["!digit", ["count2", ["num(4)", "num(9)"]]],
     #     ],
     #     [  # r"[a-zA-Z]{1,2}[0-9Rr][0-9A-Za-z]? [0-9][A-Za-z]{2}"
     #         [
@@ -919,27 +1086,50 @@ if __name__ == "__main__":
     # ga = GeneticAlgorithm(test_data_set)
     # print("pct data correct: ", get_pct_data_correct(test_data_set))
     # ga.evolve()
+    total = 0
+    correct = 0
+    for i in range(100):
+        out = []
+        res = None
+        try:
+            r = ReNodeSet.random_node_set(
+                omit_types=["mmod"], omit_wrappers=["emptyterm", "emtpy!term"]
+            )
+            rgx = r.display()
+            out.append(r)
+            out.append(rgx)
+            s = r.compile()
+            if s:
+                total += 1
+                out.append(f"'{s}'")
+                res = GeneticAlgorithm.check_match(rgx, s)
+        except:
+            for debug in out:
+                print(debug)
+            raise
 
-    for i in range(10):
-        r = ReNodeSet.random_node_set(omit_wrappers=["emptyterm", "emtpy!term"])
-        rgx = r.display()
-        print(r)
-        print(rgx)
-        s = r.compile()
-        print(s)
-        res = GeneticAlgorithm.check_match(rgx, s)
-        print(res)
-        if not res:
-            for node in r.nodes:
-                print("> ", node.re_type)
-                print("> ", node.modifier)
-                print("> ", node.children)
-                print("> ", [c.compile() for c in node.children])
-                for child in node.children:
-                    print(">> ", child)
-                    print(">> ", child.re_type)
-                    print(">> ", child.modifier)
-                    print(">> ", child.children)
-                    print(">>")
-                print(">")
-        print()
+        out.append(res)
+        if res:
+            correct += 1
+        else:
+            for debug in out:
+                print(debug)
+            print()
+
+        # if not res:
+        #     for node in r.nodes:
+        #         print("> ", node.re_type)
+        #         print("> ", node.modifier)
+        #         print("> ", node.children)
+        #         print("> ", [c.compile() for c in node.children])
+        #         for child in node.children:
+        #             print(">> ", child)
+        #             print(">> ", child.re_type)
+        #             print(">> ", child.modifier)
+        #             print(">> ", child.children)
+        #             print(">>")
+        #         print(">")
+        # print()
+
+    print()
+    print(correct, total, correct / total)
