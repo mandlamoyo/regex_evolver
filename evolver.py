@@ -48,6 +48,12 @@ class InvalidRegexError(Exception):
     pass
 
 
+class NotFoundError(Exception):
+    """Raised when no valid regex match can be compiled"""
+
+    pass
+
+
 # Regex wrapper display functions
 def d_set(l, invert=False):
     def escape_nonrange_hyphen(displayed):
@@ -236,7 +242,7 @@ class ReType:
     def init_types():
         ReType.c.add(ReType("re"))
         ReType.c.add(ReType("mod"))
-        ReType.c.add(ReType("dec+", is_modifiable=False))
+        ReType.c.add(ReType("integer", is_modifiable=False))
         ReType.c.add(ReType("range", is_modifiable=False))
         ReType.c.add(ReType("cset", ReType.c.get("re")))
         ReType.c.add(ReType("cset*", ReType.c.get("re"), is_modifiable=False))
@@ -312,16 +318,16 @@ class ReWrapper:
             ReWrapper.add_wrapper(ReWrapper(f"digit({s})", _d(s), "digit"))
 
         for s in CHAR_SETS["alpha_upper"]:
-            ReWrapper.add_wrapper(ReWrapper(f"alpha_upper({s})", _d(s), "alpha_upper"))
+            ReWrapper.add_wrapper(ReWrapper(f"alpha({s})", _d(s), "alpha_upper"))
 
         for s in CHAR_SETS["alpha_lower"]:
-            ReWrapper.add_wrapper(ReWrapper(f"alpha_lower({s})", _d(s), "alpha_lower"))
+            ReWrapper.add_wrapper(ReWrapper(f"alpha({s})", _d(s), "alpha_lower"))
 
         for s in NON_META_SYMBOL_CHARS:
             ReWrapper.add_wrapper(ReWrapper(f"printable({s})", _d(s), "printable"))
 
         for n in CHAR_SETS["digit"]:
-            ReWrapper.add_wrapper(ReWrapper(f"dec({n})", _d(n), "dec+"))
+            ReWrapper.add_wrapper(ReWrapper(f"int({n})", _d(n), "integer"))
 
         for m in META_CHARS:
             ReWrapper.add_wrapper(
@@ -365,10 +371,10 @@ class ReWrapper:
                     strip_child_mods=True,
                 ),
                 ReWrapper(
-                    "count", d_count, "mod", ["dec+"], 1, compile_function=c_count
+                    "count", d_count, "mod", ["integer"], 1, compile_function=c_count
                 ),
                 ReWrapper(
-                    "count2", d_count2, "mod", ["dec+"], 2, compile_function=c_count2
+                    "count2", d_count2, "mod", ["integer"], 2, compile_function=c_count2
                 ),
                 ReWrapper(
                     "or",
@@ -912,83 +918,140 @@ class GeneticAlgorithm:
         return scores[0][1]
 
 
-def gen_test_match(regex):
-    pc = choice(CHAR_SETS["alpha"])
-    if random() < 0.5:
-        pc += choice(CHAR_SETS["alpha"])
-    pc += choice(CHAR_SETS["digit"])
-    if random() < 0.5:
-        pc += choice(CHAR_SETS["digit"])
-    pc += (
-        " "
-        + choice(CHAR_SETS["digit"])
-        + choice(CHAR_SETS["alpha"])
-        + choice(CHAR_SETS["alpha"])
-    )
-    return pc
+def gen_test_match(regex, max_tries=10):
+    match_found = False
+    count = 0
+    while not match_found:
+
+        node_set = ReNodeSet.make_node_set(regex)
+        formatted = node_set.display()
+        res = node_set.compile()
+        if res and GeneticAlgorithm.check_match(formatted, res):
+            match_found = True
+        if count > max_tries:
+            raise NotFoundError(f"Could not compile match for regex '{formatted}'")
+        count += 1
+
+    return res
 
 
-def gen_test_no_match(num_words, chars, prob_alphanum=0.5, prob_rightsize=0.5):
+def callable_get(obj, *args):
+    if callable(obj):
+        return obj(*args)
+    return obj
+
+
+def gen_test_no_match(
+    prob_alphanum=None, prob_data_format=None, data_format=None, char_sets=None
+):
+
+    prob_alphanum = prob_alphanum or 0.5
+    prob_data_format = prob_data_format or 0.5
+
+    if not data_format:
+        prob_data_format = 0
+
+    if char_sets == RAND:
+        char_sets = list(CHAR_SETS.keys())
+
+    use_data_format = random() < prob_data_format
+    num_words = GeneticAlgorithm.select_index(MAX_WORDS) + 1
     if random() < prob_alphanum:
-        chars = "alphanum"
-    rightsize = random() < prob_rightsize
+        char_set_name = "alphanum"
+    else:
+        char_set_name = choice(char_sets)
 
-    char_set = CHAR_SETS[chars]
-    if num_words == RAND:
-        num_words = GeneticAlgorithm.select_index(MAX_WORDS) + 1
+    if use_data_format:
+        num_words = callable_get(data_format.get("num_words", None)) or num_words
+        char_set_name = callable_get(data_format.get("char_set", None)) or char_set_name
 
+    char_set = CHAR_SETS[char_set_name]
     res = []
-    if rightsize:
-        num_words = 2
-    for n in range(num_words):
-        if rightsize:
-            num_chars = [randint(3, 4), 3][n]
-        else:
-            num_chars = GeneticAlgorithm.select_index(10) + 1
+
+    for i in range(num_words):
+        num_chars = GeneticAlgorithm.select_index(10) + 1
+        if use_data_format:
+            num_chars = (
+                callable_get(data_format.get("word_length", None), i) or num_chars
+            )
         res.append("".join([choice(char_set) for i in range(num_chars)]))
+
     return " ".join(res)
 
 
-def gen_test_datum(
-    regex_names, data_format, probabilities=None, char_set="printable", words=RAND
-):
-    probabilities = probabilities or {"data_format": 0.5, "alphanum": 0.5, "match": 0.5}
-    verification_node_set = ReNodeSet.make_node_set(regex_names)
+def gen_test_datum(regex, data_format=None, probabilities=None, char_sets=RAND):
 
-    if random() < probabilities["match"]:
-        res = gen_test_match(regex_names)
+    verification_node_set = ReNodeSet.make_node_set(regex)
+
+    if random() < probabilities.get("match", 0.5):
+        res = gen_test_match(regex)
     else:
-        res = gen_test_no_match(words, char_set)
+        res = gen_test_no_match(
+            probabilities.get("alphanum"),
+            probabilities.get("data_format"),
+            data_format,
+            char_sets,
+        )
 
     is_match = GeneticAlgorithm.check_match(verification_node_set.display(), res)
     return (res, is_match)
 
 
-def gen_test_data(
-    regex_names, size=10, data_format=None, probabilities=None, char_sets=RAND
-):
-    if char_sets == RAND:
-        char_sets = list(CHAR_SETS.keys())
-
+def gen_test_data(regex, rows=10, data_format=None, probabilities=None, char_sets=RAND):
     return [
-        gen_test_datum(
-            regex_names, data_format, probabilities, char_set=choice(char_sets)
-        )
-        for i in range(size)
+        gen_test_datum(regex, data_format, probabilities, char_sets=char_sets)
+        for i in range(rows)
     ]
 
 
-def postcode_test_data_settings(size=10):
+def postcode_test_data_settings(rows=10):
     out = {}
-    out["size"] = size
+    out["rows"] = rows
     out["data_format"] = {}
     out["data_format"]["num_words"] = 2
     out["data_format"]["char_set"] = "printable"
-    out["data_format"]["word_length"] = lambda: [randint(3, 4), 3]
+    out["data_format"]["word_length"] = lambda i: [randint(3, 4), 3][i]
+    out["probabilities"] = {}
     out["probabilities"]["data_format"] = 0.5
     out["probabilities"]["alphanum"] = 0.5
     out["probabilities"]["match"] = 0.5
-    out["regex_names"] = r"[a-zA-Z]{1,2}[0-9Rr][0-9A-Za-z]? [0-9][A-Za-z]{2}"
+    out["regex"] = [  # r"[a-zA-Z]{1,2}[0-9Rr][0-9A-Za-z]? [0-9][A-Za-z]{2}"
+        [
+            "set",
+            ["count2", ["int(1)", "int(2)"]],
+            [
+                ["range", ["alpha(a)", "alpha(z)"]],
+                ["range", ["alpha(A)", "alpha(Z)"]],
+            ],
+        ],
+        [
+            "set",
+            [
+                ["range", ["digit(0)", "digit(9)"]],
+                "alpha(R)",
+                "alpha(r)",
+            ],
+        ],
+        [
+            "set",
+            "0/1",
+            [
+                ["range", ["digit(0)", "digit(9)"]],
+                ["range", ["alpha(a)", "alpha(z)"]],
+                ["range", ["alpha(A)", "alpha(Z)"]],
+            ],
+        ],
+        "space",
+        ["set", [["range", ["digit(0)", "digit(9)"]]]],
+        [
+            "set",
+            ["count", ["int(2)"]],
+            [
+                ["range", ["alpha(a)", "alpha(z)"]],
+                ["range", ["alpha(A)", "alpha(Z)"]],
+            ],
+        ],
+    ]
     return out
 
 
@@ -1003,12 +1066,9 @@ def gen_random_params():
         "pexp": random(),
         "pnew_upper": random(),
         "pnew_lower": random(),
+        # "pmodifier": random(),
+        # "pextend": random(),
     }
-
-
-# Tests
-def test():
-    pass
 
 
 ReType.init_types()
