@@ -100,3 +100,22 @@ generation, top score (% incorrect), top scoring regex, % new in next generation
 
 # Evolved Solution: '\w+\d[^R-h]\d\w??\D\D'
 ```
+
+## Tasks Remaining
+
+[]: consolidate tests
+[]: implement formatted regex (eg for test data generation) generation from node(set)
+[]: separate code into separate files
+[]: improve comments and documentation
+[]: implement hyperparameter tuning (10k cross validation)
+[]: audit missing regex functionalities
+[]: implement regex assertions (?...)
+[]: fix greedy modifier
+[]: nice to have - frontend
+
+
+## Useful Links
+
+(Regex Golf)[https://alf.nu/RegexGolf]: A handy site for testing and playing with the evolver
+
+(Programming Collective Intelligence)[https://www.amazon.co.uk/Programming-Collective-Intelligence-Building-Applications/dp/0596529325/ref=sr_1_1]: A great book which goes through genetic programming among other interesting algorithms
