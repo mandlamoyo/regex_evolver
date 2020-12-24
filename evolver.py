@@ -220,7 +220,7 @@ def c_nword():
 
 
 # Classes
-class ReTypeCollection:
+class RxTypeCollection:
     def __init__(self):
         self.types = {}
 
@@ -235,33 +235,33 @@ class ReTypeCollection:
             self.add(re_type)
 
 
-class ReType:
-    c = ReTypeCollection()
+class RxType:
+    c = RxTypeCollection()
 
     @staticmethod
     def init_types():
-        ReType.c.add(ReType("re"))
-        ReType.c.add(ReType("mod"))
-        ReType.c.add(ReType("integer", is_modifiable=False))
-        ReType.c.add(ReType("range", is_modifiable=False))
-        ReType.c.add(ReType("cset", ReType.c.get("re")))
-        ReType.c.add(ReType("cset*", ReType.c.get("re"), is_modifiable=False))
-        ReType.c.add(ReType("printable", ReType.c.get("re")))
-        ReType.c.add(ReType("alphanum", ReType.c.get("printable")))
-        ReType.c.add(ReType("digit", ReType.c.get("alphanum")))
-        ReType.c.add(ReType("alpha", ReType.c.get("alphanum")))
-        ReType.c.add(ReType("alpha_upper", ReType.c.get("alpha")))
-        ReType.c.add(ReType("alpha_lower", ReType.c.get("alpha")))
-        ReType.c.add(ReType("mmod", ReType.c.get("mod"), is_modifiable=False))
+        RxType.c.add(RxType("re"))
+        RxType.c.add(RxType("mod"))
+        RxType.c.add(RxType("integer", is_modifiable=False))
+        RxType.c.add(RxType("range", is_modifiable=False))
+        RxType.c.add(RxType("cset", RxType.c.get("re")))
+        RxType.c.add(RxType("cset*", RxType.c.get("re"), is_modifiable=False))
+        RxType.c.add(RxType("printable", RxType.c.get("re")))
+        RxType.c.add(RxType("alphanum", RxType.c.get("printable")))
+        RxType.c.add(RxType("digit", RxType.c.get("alphanum")))
+        RxType.c.add(RxType("alpha", RxType.c.get("alphanum")))
+        RxType.c.add(RxType("alpha_upper", RxType.c.get("alpha")))
+        RxType.c.add(RxType("alpha_lower", RxType.c.get("alpha")))
+        RxType.c.add(RxType("mmod", RxType.c.get("mod"), is_modifiable=False))
 
     @staticmethod
     def is_of(instance_name, of_name):
-        return ReType.c.get(instance_name).is_type_name(of_name)
+        return RxType.c.get(instance_name).is_type_name(of_name)
 
     @staticmethod
     def is_one_of(instance_name, of_names):
         for name in of_names:
-            if ReType.is_of(instance_name, name):
+            if RxType.is_of(instance_name, name):
                 return True
         return False
 
@@ -287,51 +287,51 @@ class ReType:
         return self.name == type_name
 
 
-class ReWrapper:
+class RxWrapper:
     wrappers = {}
 
     @staticmethod
     def add_wrapper(regex_wrapper):
-        ReWrapper.wrappers[regex_wrapper.name] = regex_wrapper
+        RxWrapper.wrappers[regex_wrapper.name] = regex_wrapper
 
     @staticmethod
     def add_wrappers(regex_wrappers):
         for wrapper in regex_wrappers:
-            ReWrapper.add_wrapper(wrapper)
+            RxWrapper.add_wrapper(wrapper)
 
     @staticmethod
     def get_wrapper(wrapper_name):
-        return ReWrapper.wrappers.get(wrapper_name, None)
+        return RxWrapper.wrappers.get(wrapper_name, None)
 
     @staticmethod
     def wrapper_is_type(wrapper_name, type_name):
-        wrapper = ReWrapper.get_wrapper(wrapper_name)
+        wrapper = RxWrapper.get_wrapper(wrapper_name)
         if not wrapper:
             raise KeyError(f"wrapper {wrapper_name} not found")
         return wrapper.re_type.is_type_name(type_name)
 
     @staticmethod
     def init_wrappers():
-        ReWrapper.wrappers.clear()
+        RxWrapper.wrappers.clear()
 
         for s in CHAR_SETS["digit"]:
-            ReWrapper.add_wrapper(ReWrapper(f"digit({s})", _d(s), "digit"))
+            RxWrapper.add_wrapper(RxWrapper(f"digit({s})", _d(s), "digit"))
 
         for s in CHAR_SETS["alpha_upper"]:
-            ReWrapper.add_wrapper(ReWrapper(f"alpha({s})", _d(s), "alpha_upper"))
+            RxWrapper.add_wrapper(RxWrapper(f"alpha({s})", _d(s), "alpha_upper"))
 
         for s in CHAR_SETS["alpha_lower"]:
-            ReWrapper.add_wrapper(ReWrapper(f"alpha({s})", _d(s), "alpha_lower"))
+            RxWrapper.add_wrapper(RxWrapper(f"alpha({s})", _d(s), "alpha_lower"))
 
         for s in NON_META_SYMBOL_CHARS:
-            ReWrapper.add_wrapper(ReWrapper(f"printable({s})", _d(s), "printable"))
+            RxWrapper.add_wrapper(RxWrapper(f"printable({s})", _d(s), "printable"))
 
         for n in CHAR_SETS["digit"]:
-            ReWrapper.add_wrapper(ReWrapper(f"int({n})", _d(n), "integer"))
+            RxWrapper.add_wrapper(RxWrapper(f"int({n})", _d(n), "integer"))
 
         for m in META_CHARS:
-            ReWrapper.add_wrapper(
-                ReWrapper(
+            RxWrapper.add_wrapper(
+                RxWrapper(
                     f"printable({m})",
                     _d(r"\%s" % m),
                     "printable",
@@ -340,9 +340,9 @@ class ReWrapper:
             )
 
         #  display function, it's type(s), the type(s) it takes (opt), number of inputs
-        ReWrapper.add_wrappers(
+        RxWrapper.add_wrappers(
             [
-                ReWrapper(
+                RxWrapper(
                     "range",
                     d_range,
                     "range",
@@ -352,7 +352,7 @@ class ReWrapper:
                     strip_child_mods=True,
                     uniform_child_types=True,
                 ),
-                ReWrapper(
+                RxWrapper(
                     "set",
                     d_set,
                     "re",
@@ -361,7 +361,7 @@ class ReWrapper:
                     compile_function=c_set,
                     strip_child_mods=True,
                 ),
-                ReWrapper(
+                RxWrapper(
                     "!set",
                     d_nset,
                     "re",
@@ -370,13 +370,13 @@ class ReWrapper:
                     compile_function=c_nset,
                     strip_child_mods=True,
                 ),
-                ReWrapper(
+                RxWrapper(
                     "count", d_count, "mod", ["integer"], 1, compile_function=c_count
                 ),
-                ReWrapper(
+                RxWrapper(
                     "count2", d_count2, "mod", ["integer"], 2, compile_function=c_count2
                 ),
-                ReWrapper(
+                RxWrapper(
                     "or",
                     d_or,
                     "re",
@@ -385,24 +385,24 @@ class ReWrapper:
                     compile_function=c_or,
                     is_modifiable=False,
                 ),
-                ReWrapper("wildcard", _d("."), "re", compile_function=c_wildcard),
-                ReWrapper("0+", _d("*"), "mod", compile_function=c_zero_plus),
-                ReWrapper("0/1", _d("?"), "mod", compile_function=c_zero_one),
-                ReWrapper("1+", _d("+"), "mod", compile_function=c_one_plus),
-                ReWrapper("!greedy", _d("?"), "mmod", compile_function=c_not_greedy),
-                ReWrapper(
+                RxWrapper("wildcard", _d("."), "re", compile_function=c_wildcard),
+                RxWrapper("0+", _d("*"), "mod", compile_function=c_zero_plus),
+                RxWrapper("0/1", _d("?"), "mod", compile_function=c_zero_one),
+                RxWrapper("1+", _d("+"), "mod", compile_function=c_one_plus),
+                RxWrapper("!greedy", _d("?"), "mmod", compile_function=c_not_greedy),
+                RxWrapper(
                     "whitespace", _d(r"\s"), "cset", compile_function=c_whitespace
                 ),
-                ReWrapper(
+                RxWrapper(
                     "!whitespace", _d(r"\S"), "cset", compile_function=c_nwhitespace
                 ),
-                ReWrapper("emptyterm", _d(r"\b"), "cset*", compile_function=c_empty),
-                ReWrapper("emtpy!term", _d(r"\B"), "cset*", compile_function=c_empty),
-                ReWrapper("digit", _d(r"\d"), "cset", compile_function=c_digit),
-                ReWrapper("!digit", _d(r"\D"), "cset", compile_function=c_ndigit),
-                ReWrapper("word", _d(r"\w"), "cset", compile_function=c_word),
-                ReWrapper("!word", _d(r"\W"), "cset", compile_function=c_nword),
-                ReWrapper("space", _d(r" "), "printable"),
+                RxWrapper("emptyterm", _d(r"\b"), "cset*", compile_function=c_empty),
+                RxWrapper("emtpy!term", _d(r"\B"), "cset*", compile_function=c_empty),
+                RxWrapper("digit", _d(r"\d"), "cset", compile_function=c_digit),
+                RxWrapper("!digit", _d(r"\D"), "cset", compile_function=c_ndigit),
+                RxWrapper("word", _d(r"\w"), "cset", compile_function=c_word),
+                RxWrapper("!word", _d(r"\W"), "cset", compile_function=c_nword),
+                RxWrapper("space", _d(r" "), "printable"),
             ]
         )
 
@@ -423,13 +423,13 @@ class ReWrapper:
         self.compile_function = compile_function or display_function
         self.child_count = child_count
         self.child_types = child_types
-        self.re_type = ReType.c.get(re_type)
+        self.re_type = RxType.c.get(re_type)
         self.is_modifiable = self.re_type.is_modifiable and is_modifiable
         self.strip_child_mods = strip_child_mods
         self.uniform_child_types = uniform_child_types
 
     def __repr__(self):
-        return f"ReWrapper: {self.name}(children:{self.child_count}, mod:{self.is_modifiable})"
+        return f"RxWrapper: {self.name}(children:{self.child_count}, mod:{self.is_modifiable})"
 
     def get_child_count(self):
         if self.child_count == RAND:
@@ -437,7 +437,7 @@ class ReWrapper:
         return self.child_count
 
 
-class ReNode:
+class RxNode:
     @staticmethod
     def make_node(
         rw_name=None,
@@ -460,14 +460,14 @@ class ReNode:
             if not rw_name:
                 raise ValueError("must provide regex wrapper object or name")
 
-            rw = ReWrapper.get_wrapper(rw_name)
+            rw = RxWrapper.get_wrapper(rw_name)
 
         child_nodes = []
         if rw.child_count != 0:
             if children == RAND:
                 child_types = list(
                     filter(
-                        lambda type_name: not ReType.is_one_of(type_name, omit_types),
+                        lambda type_name: not RxType.is_one_of(type_name, omit_types),
                         rw.child_types,
                     )
                 )
@@ -479,7 +479,7 @@ class ReNode:
                 if rw.uniform_child_types:
                     child_types = sample(rw.child_types, 1)
                 child_nodes = [
-                    ReNode.make_random_node(
+                    RxNode.make_random_node(
                         choice(child_types),
                         is_child=True,
                         omit_types=omit_types,
@@ -490,7 +490,7 @@ class ReNode:
             else:
                 for child in children:
                     child_nodes.append(
-                        ReNode.make_node(
+                        RxNode.make_node(
                             **child,
                             is_child=True,
                             omit_types=omit_types,
@@ -498,7 +498,7 @@ class ReNode:
                         )
                     )
 
-        node = ReNode(rw, child_nodes, is_child)
+        node = RxNode(rw, child_nodes, is_child)
         if rw.is_modifiable:
             if modifier == RAND:
                 # print("- ", node.name)
@@ -513,7 +513,7 @@ class ReNode:
                 # omit_types += ["mmod"] if mod_type == "mod" else []
                 # print(">> ", omit_types)
                 if mod_type not in omit_types:
-                    modifier = ReNode.make_random_node(
+                    modifier = RxNode.make_random_node(
                         mod_type,
                         omit_types=omit_types,
                         omit_wrappers=omit_wrappers,
@@ -522,7 +522,7 @@ class ReNode:
                     node.set_modifier(modifier)
                 # print("-- ", modifier)
             elif modifier:
-                modifier = ReNode.make_node(**modifier)
+                modifier = RxNode.make_node(**modifier)
                 node.set_modifier(modifier)
 
         return node
@@ -538,19 +538,19 @@ class ReNode:
     ):
         omit_types = omit_types or []
         omit_wrappers = omit_wrappers or []
-        re_type = ReType.c.get(type_name)
+        re_type = RxType.c.get(type_name)
 
-        # filter ReWrapper.wrappers with items that match re_type
+        # filter RxWrapper.wrappers with items that match re_type
         filtered_wrappers = list(
             filter(
                 lambda rw: rw.re_type.is_type(re_type, strict=strict_type_match),
-                ReWrapper.wrappers.values(),
+                RxWrapper.wrappers.values(),
             )
         )
 
         # filter out types specified for omission in node generation
         for omit in omit_types:
-            omit_type = ReType.c.get(omit)
+            omit_type = RxType.c.get(omit)
             filtered_wrappers = list(
                 filter(lambda rw: not rw.re_type.is_type(omit_type), filtered_wrappers)
             )
@@ -559,7 +559,7 @@ class ReNode:
         if not is_child and SUPPRESS_ROOT_CHARS:
             filtered_wrappers = list(
                 filter(
-                    lambda rw: not rw.re_type.is_type(ReType.c.get("printable")),
+                    lambda rw: not rw.re_type.is_type(RxType.c.get("printable")),
                     filtered_wrappers,
                 )
             )
@@ -575,7 +575,7 @@ class ReNode:
         if rw.is_modifiable and random() < prob_modifier:
             modifier = RAND
 
-        return ReNode.make_node(
+        return RxNode.make_node(
             rw=rw,
             modifier=modifier,
             is_child=is_child,
@@ -660,7 +660,7 @@ class ReNode:
 
     def mutate(self, prob_change=0.1):
         if random() < prob_change:
-            return ReNode.make_random_node(
+            return RxNode.make_random_node(
                 type_name=self.re_type.name, is_child=self.is_child
             )
         else:
@@ -673,7 +673,7 @@ class ReNode:
             return new_node
 
 
-class ReNodeSet:
+class RxNodeSet:
     @staticmethod
     def make_node_set(regex_node_set_info):
         """
@@ -703,7 +703,7 @@ class ReNodeSet:
 
             node = {"rw_name": node_info[0]}
             for n in node_info[1:]:
-                if ReWrapper.wrapper_is_type(first_nested(n), "mod"):
+                if RxWrapper.wrapper_is_type(first_nested(n), "mod"):
                     node["modifier"] = format_node(n)
 
                 else:
@@ -712,20 +712,20 @@ class ReNodeSet:
             return node
 
         formatted_node_info = [format_node(n) for n in regex_node_set_info]
-        return ReNodeSet([ReNode.make_node(**fn) for fn in formatted_node_info])
+        return RxNodeSet([RxNode.make_node(**fn) for fn in formatted_node_info])
 
     @staticmethod
     def random_node_set(prob_extend=P_EXTEND, omit_types=None, omit_wrappers=None):
         nodes = [
-            ReNode.make_random_node(omit_types=omit_types, omit_wrappers=omit_wrappers)
+            RxNode.make_random_node(omit_types=omit_types, omit_wrappers=omit_wrappers)
         ]
         while random() < prob_extend:
             nodes.append(
-                ReNode.make_random_node(
+                RxNode.make_random_node(
                     omit_types=omit_types, omit_wrappers=omit_wrappers
                 )
             )
-        return ReNodeSet(nodes)
+        return RxNodeSet(nodes)
 
     def __init__(self, nodes):
         self.nodes = nodes
@@ -754,9 +754,9 @@ class ReNodeSet:
                 new_nodes = new_nodes[:ix] + new_nodes[ix + 1 :]
             else:
                 new_nodes = (
-                    new_nodes[:ix] + [ReNode.make_random_node()] + new_nodes[ix:]
+                    new_nodes[:ix] + [RxNode.make_random_node()] + new_nodes[ix:]
                 )
-        return ReNodeSet(new_nodes)
+        return RxNodeSet(new_nodes)
 
     def crossover(self, node_set, probswap):
         new_nodes = self.nodes
@@ -768,7 +768,7 @@ class ReNodeSet:
                 + node_set.nodes[cuts[0] : cuts[1]]
                 + self.nodes[cuts[1] :]
             )
-        return ReNodeSet([deepcopy(node) for node in new_nodes])
+        return RxNodeSet([deepcopy(node) for node in new_nodes])
 
 
 class GeneticAlgorithm:
@@ -805,7 +805,7 @@ class GeneticAlgorithm:
         self.dataset = dataset
 
     def generate_population(self, n=10):
-        self.population = [ReNodeSet.random_node_set() for _ in range(n)]
+        self.population = [RxNodeSet.random_node_set() for _ in range(n)]
 
     def sample_dataset(self, size=None):
         return GeneticAlgorithm.safe_sample(self.dataset, size)
@@ -882,7 +882,7 @@ class GeneticAlgorithm:
 
             while len(new_pop) < pop_size:
                 if random() < pnew:
-                    new_pop.append(ReNodeSet.random_node_set())
+                    new_pop.append(RxNodeSet.random_node_set())
                 else:
                     ixs = [
                         GeneticAlgorithm.select_index(len(self.population) - 1)
@@ -923,7 +923,7 @@ def gen_test_match(regex, max_tries=10):
     count = 0
     while not match_found:
 
-        node_set = ReNodeSet.make_node_set(regex)
+        node_set = RxNodeSet.make_node_set(regex)
         formatted = node_set.display()
         res = node_set.compile()
         if res and GeneticAlgorithm.check_match(formatted, res):
@@ -981,7 +981,7 @@ def gen_test_no_match(
 
 def gen_test_datum(regex, data_format=None, probabilities=None, char_sets=RAND):
 
-    verification_node_set = ReNodeSet.make_node_set(regex)
+    verification_node_set = RxNodeSet.make_node_set(regex)
 
     if random() < probabilities.get("match", 0.5):
         res = gen_test_match(regex)
@@ -1071,8 +1071,8 @@ def gen_random_params():
     }
 
 
-ReType.init_types()
-ReWrapper.init_wrappers()
+RxType.init_types()
+RxWrapper.init_wrappers()
 
 
 if __name__ == "__main__":
@@ -1133,7 +1133,7 @@ if __name__ == "__main__":
     # ]
 
     # for e in node_set_examples:
-    #     ns = ReNodeSet.make_node_set(e)
+    #     ns = RxNodeSet.make_node_set(e)
     #     rgx = ns.display()
     #     s = ns.compile()
     #     print(ns)
@@ -1152,7 +1152,7 @@ if __name__ == "__main__":
         out = []
         res = None
         try:
-            r = ReNodeSet.random_node_set(
+            r = RxNodeSet.random_node_set(
                 omit_types=["mmod"], omit_wrappers=["emptyterm", "emtpy!term"]
             )
             rgx = r.display()
