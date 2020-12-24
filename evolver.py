@@ -97,9 +97,9 @@ def _d(v):
 
 
 def invert_set(values, char_set="printable"):
-    if not isinstance(values, list):
-        values = list(values)
-    return list(set(CHAR_SETS[char_set]) - set(values))
+    if not isinstance(values, set):
+        values = set(values)
+    return list(RxWrapper.char_sets[char_set] - values)
 
 
 def expand_set(node):
@@ -114,13 +114,16 @@ def expand_set(node):
 
     elif node.re_type.is_type_name("cset"):
         if "digit" in node.name:
-            char_set.extend([v for v in CHAR_SETS["digit"]])
+            # char_set.extend([v for v in CHAR_SETS["digit"]])
+            char_set += list(RxWrapper.char_sets["digit"])
 
         elif "whitespace" in node.name:
             char_set.extend(WHITESPACE_CHARS)
 
         elif "word" in node.name:
-            char_set.extend([v for v in CHAR_SETS["alphanum"] + "_"])
+            # char_set.extend([v for v in CHAR_SETS["alphanum"] + "_"])
+            char_set += list(RxWrapper.char_sets["alphanum"])
+            char_set.append("_")
 
         if "!" in node.name:
             char_set = invert_set(char_set)
@@ -169,7 +172,7 @@ def c_range(l):
 def c_wildcard():
     if not DOT_ALL:
         return choice(invert_set(["\n"]))
-    return choice(CHAR_SETS["printable"])
+    return choice(list(RxWrapper.char_sets["printable"]))
 
 
 def c_zero_plus(compiled):
@@ -204,19 +207,19 @@ def c_empty():
 
 
 def c_digit():
-    return choice(CHAR_SETS["digit"])
+    return choice(RxWrapper.char_sets["digit"])
 
 
 def c_ndigit():
-    return choice(invert_set(CHAR_SETS["digit"]))
+    return choice(invert_set(RxWrapper.char_sets["digit"]))
 
 
 def c_word():
-    return choice(CHAR_SETS["alphanum"] + "_")
+    return choice(RxWrapper.char_sets["alphanum"] + "_")
 
 
 def c_nword():
-    return choice(invert_set(CHAR_SETS["alphanum"] + "_"))
+    return choice(invert_set(RxWrapper.char_sets["alphanum"] + "_"))
 
 
 # Classes
@@ -265,9 +268,18 @@ class RxType:
                 return True
         return False
 
-    def __init__(self, name, parent_retype=None, is_modifiable=True):
+    @staticmethod
+    def get_full_type_names(type_name):
+        rxtype = RxType.c.get(type_name)
+        type_list = [type_name]
+        while rxtype.parent:
+            rxtype = rxtype.parent
+            type_list.append(rxtype.name)
+        return type_list
+
+    def __init__(self, name, parent_rxtype=None, is_modifiable=True):
         self.name = name
-        self.parent = parent_retype
+        self.parent = parent_rxtype
         self.is_modifiable = is_modifiable
 
     def __repr__(self):
@@ -289,6 +301,7 @@ class RxType:
 
 class RxWrapper:
     wrappers = {}
+    char_sets = {c: set() for c in CHAR_SETS.keys()}
 
     @staticmethod
     def add_wrapper(regex_wrapper):
@@ -311,35 +324,61 @@ class RxWrapper:
         return wrapper.re_type.is_type_name(type_name)
 
     @staticmethod
-    def init_wrappers():
+    def init_char_set(
+        type_name,
+        printable_subset=None,
+        label=None,
+        display_func_generator=_d,
+        compile_function=None,
+        char_set=None,
+    ):
+        label = label or type_name
+        char_set = char_set or CHAR_SETS[type_name]
+        type_names = set(RxType.get_full_type_names(type_name))
+
+        if type_names & printable_subset:
+            for s in char_set:
+                RxWrapper.add_wrapper(
+                    RxWrapper(
+                        f"{label}({s})",
+                        display_func_generator(s),
+                        type_name,
+                        compile_function=compile_function,
+                    )
+                )
+
+                for name in type_names:
+                    if name in RxWrapper.char_sets:
+                        RxWrapper.char_sets[name].add(s)
+
+    @staticmethod
+    def init_wrappers(printable_subset=None):
+        if not printable_subset:
+            printable_subset = CHAR_SETS.keys()
+        printable_subset = set(printable_subset)
+
+        # clear containers
         RxWrapper.wrappers.clear()
+        for key in RxWrapper.char_sets.keys():
+            RxWrapper.char_sets[key].clear()
 
-        for s in CHAR_SETS["digit"]:
-            RxWrapper.add_wrapper(RxWrapper(f"digit({s})", _d(s), "digit"))
-
-        for s in CHAR_SETS["alpha_upper"]:
-            RxWrapper.add_wrapper(RxWrapper(f"alpha({s})", _d(s), "alpha_upper"))
-
-        for s in CHAR_SETS["alpha_lower"]:
-            RxWrapper.add_wrapper(RxWrapper(f"alpha({s})", _d(s), "alpha_lower"))
-
-        for s in NON_META_SYMBOL_CHARS:
-            RxWrapper.add_wrapper(RxWrapper(f"printable({s})", _d(s), "printable"))
+        RxWrapper.init_char_set("digit", printable_subset)
+        RxWrapper.init_char_set("alpha_upper", printable_subset, label="alpha")
+        RxWrapper.init_char_set("alpha_lower", printable_subset, label="alpha")
+        RxWrapper.init_char_set(
+            "printable", printable_subset, char_set=NON_META_SYMBOL_CHARS
+        )
+        RxWrapper.init_char_set(
+            "printable",
+            printable_subset,
+            char_set=META_CHARS,
+            display_func_generator=lambda m: _d(r"\%s" % m),
+            compile_function=_d,
+        )
 
         for n in CHAR_SETS["digit"]:
             RxWrapper.add_wrapper(RxWrapper(f"int({n})", _d(n), "integer"))
 
-        for m in META_CHARS:
-            RxWrapper.add_wrapper(
-                RxWrapper(
-                    f"printable({m})",
-                    _d(r"\%s" % m),
-                    "printable",
-                    compile_function=_d(m),
-                )
-            )
-
-        #  display function, it's type(s), the type(s) it takes (opt), number of inputs
         RxWrapper.add_wrappers(
             [
                 RxWrapper(
@@ -918,7 +957,7 @@ class GeneticAlgorithm:
         return scores[0][1]
 
 
-def gen_test_match(regex, max_tries=10):
+def gen_test_match(regex, char_sets=None, max_tries=10):
     match_found = False
     count = 0
     while not match_found:
@@ -1002,6 +1041,20 @@ def gen_test_data(regex, rows=10, data_format=None, probabilities=None, char_set
         gen_test_datum(regex, data_format, probabilities, char_sets=char_sets)
         for i in range(rows)
     ]
+
+
+rg1_test_data_settings = {
+    "data_format": {"num_words": 1, "char_set": "alpha"},
+    "rows": 100,
+    "probabilities": {"data_format": 1},
+    "regex": [
+        ["wildcard", "0+"],
+        "alpha(f)",
+        "alpha(o)",
+        "alpha(o)",
+        ["wildcard", "0+"],
+    ],
+}
 
 
 def postcode_test_data_settings(rows=10):
