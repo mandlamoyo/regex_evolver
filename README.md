@@ -103,15 +103,15 @@ generation, top score (% incorrect), top scoring regex, % new in next generation
 
 ## Tasks Remaining
 
-[]: consolidate tests
-[]: implement formatted regex (eg for test data generation) generation from node(set)
-[]: separate code into separate files
-[]: improve comments and documentation
-[]: implement hyperparameter tuning (10k cross validation)
-[]: audit missing regex functionalities
-[]: implement regex assertions (?...)
-[]: fix greedy modifier
-[]: nice to have - frontend
+[ ]: consolidate tests
+[ ]: implement formatted regex (eg for test data generation) generation from node(set)
+[X]: separate code into separate files
+[ ]: improve comments and documentation
+[ ]: implement hyperparameter tuning (10k cross validation)
+[ ]: audit missing regex functionalities
+[ ]: implement regex assertions (?...)
+[ ]: fix greedy modifier
+[ ]: nice to have - frontend
 
 
 ## Useful Links
