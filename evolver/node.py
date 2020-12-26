@@ -1,4 +1,6 @@
+from __future__ import annotations
 from random import random, randint, sample, choice
+from typing import Any, Union, Callable, Optional, Iterable, Sequence, Dict, List, Set
 from copy import deepcopy
 
 from evolver.config import RAND, P_MODIFIER, P_EXTEND, SUPPRESS_ROOT_CHARS
@@ -6,6 +8,34 @@ from evolver.exceptions import InvalidRegexError
 from evolver.helpers import Singleton
 from evolver.wrappers import RxWrapper
 from evolver.types import RxType
+
+
+NodeSpec = Dict[str, Union[str, "NodeSpec", List["NodeSpec"]]]
+RxSpec = List[Union[str, "RxSpec", List["RxSpec"]]]
+
+
+def first_nested(values: List[Any]):
+    if not values:
+        raise ValueError("list is empty")
+
+    if isinstance(values, list):
+        return first_nested(values[0])
+    return values
+
+
+def parse_rxspec(rxspec: RxSpec) -> NodeSpec:
+    if not isinstance(rxspec, list):
+        rxspec = [rxspec]
+
+    node_spec = {"rw_name": rxspec[0]}
+    for spec in rxspec[1:]:
+        if RxWrapper.wrapper_is_type(first_nested(spec), "mod"):
+            node_spec["modifier"] = parse_rxspec(spec)
+
+        else:
+            node_spec["children"] = [parse_rxspec(child) for child in spec]
+
+    return node_spec
 
 
 @Singleton
@@ -16,42 +46,40 @@ class RxNodeFactory:
             "FOR RESOLVING PYLINT DECORATOR ISSUE, SHOULD NOT BE REACHED"
         )
 
-    def __init__(self):
-        self.omit_types = []
-        self.omit_wrappers = []
+    def __init__(self) -> None:
+        self.omit_types: Set[str] = set()
+        self.omit_wrappers: Set[str] = set()
 
-    def set_omit(self, types=None, wrappers=None):
-        if types:
-            if not isinstance(list, types):
-                types = [types]
-            self.omit_types.extend(types)
-        else:
-            self.clear_omit(types=True)
+    def set_omit(
+        self,
+        types: Optional[Union[str, Iterable[str]]] = None,
+        wrappers: Optional[Union[str, Iterable[str]]] = None,
+    ) -> None:
 
-        if wrappers:
-            if not isinstance(list, wrappers):
-                wrappers = [wrappers]
-            self.omit_wrappers.extend(wrappers)
-        else:
-            self.clear_omit(wrappers=True)
+        if types and not isinstance(set, types):
+            types = set(types)
+        self.omit_types = types or set()
 
-    def clear_omit(self, types=False, wrappers=False):
+        if wrappers and not isinstance(list, wrappers):
+            wrappers = set(wrappers)
+        self.omit_wrappers = wrappers or set()
+
+    def clear_omit(self, types: bool = False, wrappers: bool = False) -> None:
         if not (types and wrappers):
             self.clear_omit(types=True, wrappers=True)
-        if types:
-            self.omit_types = []
-        if wrappers:
-            self.omit_wrappers = []
+
+        types and self.omit_types.clear()
+        wrappers and self.omit_wrappers.clear()
 
     def make_node(
         self,
-        rw_name=None,
-        children=RAND,
-        modifier=None,
-        rw=None,
-        is_child=False,
-        strict_type_match=False,
-    ):
+        rw_name: Optional[str] = None,
+        children: Optional[List[NodeSpec]] = RAND,
+        modifier: Optional[NodeSpec] = None,
+        rw: Optional[RxWrapper] = None,
+        is_child: Optional[bool] = False,
+        strict_type_match: Optional[bool] = False,
+    ) -> RxNode:
         """
         children format: [{'rw_name': regex_wrapper_name, 'children': [<children>]})]
         modifier format: {'rw_name': <modifier_name>, 'children': <children>, 'modifier': <modifier>}
@@ -109,18 +137,13 @@ class RxNodeFactory:
 
         return node
 
-    @staticmethod
     def make_random_node(
         self,
-        type_name="re",
-        is_child=False,
-        prob_modifier=P_MODIFIER,
-        omit_types=None,
-        omit_wrappers=None,
-        strict_typing=False,
-    ):
-        omit_types = omit_types or []
-        omit_wrappers = omit_wrappers or []
+        type_name: Optional[str] = "re",
+        is_child: Optional[bool] = False,
+        prob_modifier: Optional[float] = P_MODIFIER,
+        strict_typing: Optional[bool] = False,
+    ) -> RxNode:
         re_type = RxType.get_type(type_name)
 
         # filter RxWrapper.wrappers with items that match re_type
@@ -132,7 +155,7 @@ class RxNodeFactory:
         )
 
         # filter out types specified for omission in node generation
-        for omit in omit_types:
+        for omit in self.omit_types:
             omit_type = RxType.get_type(omit)
             filtered_wrappers = list(
                 filter(lambda rw: not rw.re_type.is_type(omit_type), filtered_wrappers)
@@ -148,7 +171,7 @@ class RxNodeFactory:
             )
 
         # filter out wrappers specified for omission in node generation
-        for omit in omit_wrappers:
+        for omit in self.omit_wrappers:
             filtered_wrappers = list(
                 filter(lambda rw: rw.name != omit, filtered_wrappers)
             )
@@ -167,24 +190,25 @@ class RxNodeFactory:
 
 @Singleton
 class RxNode:
-    def __init__(self, rw, children, is_child):
-        self.next = None  # TODO: remove?
-        self.name = rw.name
-        self.modifier = None
-        self.assertion = None
-        self.children = children
-        self.re_type = rw.re_type
-        self.display_function = rw.display_function
-        self.compile_function = rw.compile_function
-        self.is_child = is_child
-        self.strip_child_mods = rw.strip_child_mods
-        self.strip_mod = False
+    def __init__(
+        self, wrapper: RxWrapper, children: Sequence[RxNode], is_child: bool
+    ) -> None:
+        self.name: str = wrapper.name
+        self.modifier: RxNode = None
+        self.assertion: RxNode = None
+        self.children: Sequence[RxNode] = children
+        self.rxtype: RxType = wrapper.rxtype
+        self.display_function: Callable = wrapper.display_function
+        self.compile_function: Callable = wrapper.compile_function
+        self.is_child: bool = is_child
+        self.strip_child_mods: bool = wrapper.strip_child_mods
+        self.strip_mod: bool = False
 
         for child in self.children:
             if self.strip_child_mods:
                 child.strip_mod = True
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         out = f"{self.name}"
         if self.modifier:
             out += f":<{self.modifier}>"
@@ -192,16 +216,13 @@ class RxNode:
             out += f"{str(self.children)}"
         return out
 
-    def set_assertion(self, assertion):
+    def set_assertion(self, assertion: RxNode) -> None:
         self.assertion = assertion
 
-    def set_modifier(self, modifier):
+    def set_modifier(self, modifier: RxNode) -> None:
         self.modifier = modifier
 
-    def set_next(self, node):
-        self.next = node
-
-    def display(self):
+    def display(self) -> str:
         out = ""
 
         if self.assertion and not self.strip_mod:
@@ -217,21 +238,22 @@ class RxNode:
         if self.modifier and not self.strip_mod:
             out += self.modifier.display()
 
-        if self.next:
-            out += self.next.display()
-
         return out
 
-    def compile(self, compiled_node=None, compiled_children=None):
+    def compile(
+        self,
+        compiled_node: Optional[str] = None,
+        compiled_children: Optional[List[str]] = None,
+    ) -> str:
         args = []
 
         if self.children:
             args.append(self.children)
 
-        if self.re_type.is_type_name("mod"):
+        if self.rxtype.is_type_name("mod"):
             args.append(compiled_node)
 
-        if self.re_type.is_type_name("mmod"):
+        if self.rxtype.is_type_name("mmod"):
             args.append(compiled_children)
 
         res = self.compile_function(*args)
@@ -242,10 +264,10 @@ class RxNode:
             )
         return res
 
-    def mutate(self, node_factory, prob_change):
+    def mutate(self, node_factory: RxNodeFactory, prob_change: float) -> RxNode:
         if random() < prob_change:
             return node_factory.make_random_node(
-                type_name=self.re_type.name, is_child=self.is_child
+                type_name=self.rxtype.name, is_child=self.is_child
             )
         else:
             new_children = []
@@ -265,10 +287,20 @@ class RxNodeSetFactory:
             "FOR RESOLVING PYLINT DECORATOR ISSUE, SHOULD NOT BE REACHED"
         )
 
-    def __init__(self):
-        self.node_factory = RxNodeFactory.instance()
+    def __init__(self) -> None:
+        self.node_factory: RxNodeFactory = RxNodeFactory.instance()
 
-    def make_node_set(self, regex_node_set_info):
+    def set_omit(
+        self,
+        types: Optional[Union[str, Iterable[str]]] = None,
+        wrappers: Optional[Union[str, Iterable[str]]] = None,
+    ):
+        self.node_factory.set_omit(types, wrappers)
+
+    def clear_omit(self, types: bool = False, wrappers: bool = False) -> None:
+        self.node_factory.clear_omit(types, wrappers)
+
+    def make_node_set(self, regex_specification: RxSpec) -> RxNodeSet:
         """
         format: [
             'name_1',
@@ -282,56 +314,30 @@ class RxNodeSetFactory:
         ]
         """
 
-        def first_nested(li):
-            if not li:
-                raise ValueError("list is empty")
+        node_specs: List[NodeSpec] = [
+            parse_rxspec(rxspec) for rxspec in regex_specification
+        ]
+        return RxNodeSet([self.node_factory.make_node(**spec) for spec in node_specs])
 
-            if isinstance(li, list):
-                return first_nested(li[0])
-            return li
-
-        def format_node(node_info):
-            if not isinstance(node_info, list):
-                node_info = [node_info]
-
-            node = {"rw_name": node_info[0]}
-            for n in node_info[1:]:
-                if RxWrapper.wrapper_is_type(first_nested(n), "mod"):
-                    node["modifier"] = format_node(n)
-
-                else:
-                    node["children"] = [format_node(child) for child in n]
-
-            return node
-
-        formatted_node_info = [format_node(n) for n in regex_node_set_info]
-        return RxNodeSet(
-            [self.node_factory.make_node(**fn) for fn in formatted_node_info]
-        )
-
-    def random_node_set(
-        self, prob_extend=P_EXTEND, omit_types=None, omit_wrappers=None
-    ):
-        self.node_factory.set_omit(omit_types, omit_wrappers)
-
-        nodes = [self.node_factory.make_random_node()]
+    def random_node_set(self, prob_extend: Optional[float] = P_EXTEND) -> RxNodeSet:
+        nodes: List[RxNode] = [self.node_factory.make_random_node()]
         while random() < prob_extend:
             nodes.append(self.node_factory.make_random_node())
         return RxNodeSet(nodes)
 
 
 class RxNodeSet:
-    def __init__(self, nodes):
-        self.node_factory = RxNodeFactory.instance()
-        self.nodes = nodes
+    def __init__(self, nodes: Sequence[RxNode]) -> None:
+        self.node_factory: RxNodeFactory = RxNodeFactory.instance()
+        self.nodes: Sequence = nodes
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return ", ".join([str(node) for node in self.nodes])
 
-    def display(self):
+    def display(self) -> str:
         return "".join([node.display() for node in self.nodes])
 
-    def compile(self):
+    def compile(self) -> str:
         try:
             return "".join([node.compile() for node in self.nodes])
         except InvalidRegexError as e:
@@ -341,7 +347,7 @@ class RxNodeSet:
         except:
             raise
 
-    def mutate(self, prob_change):
+    def mutate(self, prob_change: float) -> RxNodeSet:
         new_nodes = [node.mutate(self.node_factory, prob_change) for node in self.nodes]
         if random() < prob_change:
             ix = randint(0, len(new_nodes) - 1)
@@ -355,7 +361,7 @@ class RxNodeSet:
                 )
         return RxNodeSet(new_nodes)
 
-    def crossover(self, node_set, probswap):
+    def crossover(self, node_set: RxNodeSet, probswap: float) -> RxNodeSet:
         new_nodes = self.nodes
         if random() < probswap:
             max_len = max([len(self.nodes), len(node_set.nodes)])

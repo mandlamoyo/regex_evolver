@@ -1,3 +1,6 @@
+from __future__ import annotations
+from typing import Callable, Optional, Iterable, Dict, List
+
 from evolver.types import RxType, CharSets
 from evolver.wrapper_functions import *
 from evolver.helpers import _d
@@ -13,30 +16,34 @@ char_sets = CharSets.instance()
 
 
 class RxWrapper:
-    wrappers = {}
+    """
+    The templates that define the various components of which regexes consist.
+    """
+
+    wrappers: Dict[str, RxWrapper] = {}
 
     @staticmethod
-    def add_wrapper(regex_wrapper):
+    def add_wrapper(regex_wrapper: RxWrapper) -> None:
         RxWrapper.wrappers[regex_wrapper.name] = regex_wrapper
 
     @staticmethod
-    def add_wrappers(regex_wrappers):
+    def add_wrappers(regex_wrappers: Iterable[RxWrapper]) -> None:
         for wrapper in regex_wrappers:
             RxWrapper.add_wrapper(wrapper)
 
     @staticmethod
-    def get_wrapper(wrapper_name):
+    def get_wrapper(wrapper_name: str) -> RxWrapper:
         return RxWrapper.wrappers.get(wrapper_name, None)
 
     @staticmethod
-    def wrapper_is_type(wrapper_name, type_name):
-        wrapper = RxWrapper.get_wrapper(wrapper_name)
+    def wrapper_is_type(wrapper_name: str, type_name: str) -> bool:
+        wrapper: RxWrapper = RxWrapper.get_wrapper(wrapper_name)
         if not wrapper:
             raise KeyError(f"wrapper {wrapper_name} not found")
-        return wrapper.re_type.is_type_name(type_name)
+        return wrapper.rxtype.is_type_name(type_name)
 
     @staticmethod
-    def init_wrappers(printable_subset=None):
+    def init_wrappers(printable_subset: Optional[Iterable[str]] = None) -> None:
         if not printable_subset:
             printable_subset = CHAR_SETS.keys()
         printable_subset = set(printable_subset)
@@ -135,30 +142,45 @@ class RxWrapper:
 
     def __init__(
         self,
-        name,
-        display_function,
-        re_type,
-        child_types=None,
-        child_count=0,
-        is_modifiable=True,
-        compile_function=None,
-        strip_child_mods=False,
-        uniform_child_types=False,
-    ):
+        name: str,
+        display_function: Callable[..., str],
+        rxtype_name: str,
+        child_types: Optional[List[str]] = None,
+        child_count: Optional[int] = 0,
+        is_modifiable: Optional[bool] = True,
+        compile_function: Optional[Callable[..., str]] = None,
+        strip_child_mods: Optional[bool] = False,
+        uniform_child_types: Optional[bool] = False,
+    ) -> None:
+        """
+        Instantiates a wrapper that defines a particular regex component.
+
+        Parameters
+        ----------
+        `name`: The name of the regex component.
+        `display_function`: The function used to display the given regex component wrapper.
+        `rxtype_name`: The name of the regex component wrapper's type (RxType).
+        `child_types`: The types that are allowable for the component's children.
+        `child_count`: The number of children the regex component requires.
+        `is_modifiable`: Whether the component can have frequency modifiers (`?`, `+`, `*`, `{}`) attached to it.
+        `compile_function`: The function used when the regex component is compiled into a concrete instance.
+        `strip_child_mods`: Whether the component cannot have children with modifiers (eg range `[value]-[value]`)
+        `uniform_child_types`: Whether the component's children must all be of the same type (eg modifier ranged count `{X, Y}`)
+        """
         self.name = name
         self.display_function = display_function
         self.compile_function = compile_function or display_function
         self.child_count = child_count
         self.child_types = child_types
-        self.re_type = RxType.get_type(re_type)
-        self.is_modifiable = self.re_type.is_modifiable and is_modifiable
+        self.rxtype = RxType.get_type(rxtype_name)
+        self.is_modifiable = self.rxtype.is_modifiable and is_modifiable
         self.strip_child_mods = strip_child_mods
         self.uniform_child_types = uniform_child_types
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"RxWrapper: {self.name}(children:{self.child_count}, mod:{self.is_modifiable})"
 
-    def get_child_count(self):
+    def get_child_count(self) -> int:
         if self.child_count == RAND:
             return randint(1, MAX_CHILDREN)
         return self.child_count

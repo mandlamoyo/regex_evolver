@@ -1,4 +1,5 @@
 from random import random, randint, sample
+from typing import Any, Sequence, Optional, List, Tuple
 from math import log
 import string
 import csv
@@ -20,26 +21,32 @@ from evolver.config import (
 
 class GeneticAlgorithm:
     @staticmethod
-    def select_index(limit, pexp=0.7):
+    def select_index(limit: int, pexp: Optional[float] = 0.7) -> int:
         return min(int(log(random()) / log(pexp)), limit)
 
     @staticmethod
-    def check_match(pattern, string):
-        m = re.fullmatch(pattern, string)
+    def check_match(pattern: str, comparator: str) -> bool:
+        m = re.fullmatch(pattern, comparator)
         return m is not None
 
     @staticmethod
-    def safe_sample(collection, size=None):
+    def safe_sample(collection: Sequence[Any], size: Optional[int] = None) -> List[Any]:
         if size and size <= len(collection):
             return sample(collection, size)
         return collection
 
-    def __init__(self, dataset=None):
-        self.population = []
-        self.dataset = dataset
-        self.node_set_factory = RxNodeSetFactory.instance()
+    def __init__(self, dataset: Optional[Sequence[Tuple[str, bool]]] = None) -> None:
+        self.population: Sequence["RxNodeSet"] = []
+        self.dataset: Sequence[Tuple[str, bool]] = dataset
+        self.node_set_factory: RxNodeSetFactory = RxNodeSetFactory.instance()
 
-    def load_data(self, dataset=None, filepath=None, delimiter=",", quotechar="|"):
+    def load_data(
+        self,
+        dataset: Optional[Sequence[Tuple[str, bool]]] = None,
+        filepath: Optional[str] = None,
+        delimiter: Optional[str] = ",",
+        quotechar: Optional[str] = "|",
+    ) -> None:
         if not dataset:
             if not filepath:
                 raise ValueError("must provide dataset or filepath")
@@ -52,18 +59,22 @@ class GeneticAlgorithm:
 
         self.dataset = dataset
 
-    def generate_population(self, n=10):
-        self.population = [self.node_set_factory.random_node_set() for _ in range(n)]
+    def generate_population(self, size: Optional[int] = 10) -> None:
+        self.population = [self.node_set_factory.random_node_set() for _ in range(size)]
 
-    def sample_dataset(self, size=None):
+    def sample_dataset(self, size: int = None) -> List[Tuple[str, bool]]:
         return GeneticAlgorithm.safe_sample(self.dataset, size)
 
-    def sample_population(self, size=None):
+    def sample_population(self, size: int = None) -> List["RxNodeSet"]:
         return GeneticAlgorithm.safe_sample(self.population, size)
 
     def score_func(
-        self, node_set=None, sample_size=None, verbose=False, regex_string=None
-    ):
+        self,
+        node_set: Optional["RxNodeSet"] = None,
+        sample_size: Optional[int] = None,
+        verbose: Optional[bool] = False,
+        regex_string: Optional[str] = None,
+    ) -> float:
         correct = 0
         if not regex_string:
             if not node_set:
@@ -91,7 +102,9 @@ class GeneticAlgorithm:
             print()
         return 1 - correct / len(dataset)
 
-    def rank_population(self, sample_size=None, verbose=False):
+    def rank_population(
+        self, sample_size: Optional[int] = None, verbose: Optional[bool] = False
+    ) -> Sequence[Tuple[float, "RxNodeSet"]]:
         population_sample = self.sample_population(sample_size)
         scores = [
             (self.score_func(node_set, verbose), node_set)
@@ -99,22 +112,22 @@ class GeneticAlgorithm:
         ]
         return sorted(scores, key=lambda s: s[0])
 
-    def print_population(self, lim=10):
+    def print_population(self, lim: Optional[int] = 10) -> None:
         for i in range(len(self.population[:lim])):
             print(i, self.population[i], f":: {self.population[i].display()}")
         print()
 
     def evolve(
         self,
-        pop_size=POP_SIZE,
-        max_gen=MAX_GEN,
-        mutation_rate=MUTATION_RATE,
-        crossover_rate=CROSSOVER_RATE,
-        pexp=P_EXP,
-        pnew_upper=P_NEW_UPPER,
-        pnew_lower=P_NEW_LOWER,
-        verbose=DISPLAY_MESSAGES,
-    ):
+        pop_size: Optional[int] = POP_SIZE,
+        max_gen: Optional[int] = MAX_GEN,
+        mutation_rate: Optional[float] = MUTATION_RATE,
+        crossover_rate: Optional[float] = CROSSOVER_RATE,
+        pexp: Optional[float] = P_EXP,
+        pnew_upper: Optional[float] = P_NEW_UPPER,
+        pnew_lower: Optional[float] = P_NEW_LOWER,
+        verbose: Optional[bool] = DISPLAY_MESSAGES,
+    ) -> "RxNodeSet":
         self.generate_population(pop_size)
         pnew_dec = (pnew_upper - pnew_lower) / max_gen
         pnew = pnew_upper
