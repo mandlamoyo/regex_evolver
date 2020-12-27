@@ -233,7 +233,7 @@ class RxNodeFactory:
                     node.set_modifier(modifier_node)
                 # print("-- ", modifier)
             elif modifier:
-                modifier_node: RxNode = self.make_node(**modifier)
+                modifier_node = self.make_node(**modifier)
                 node.set_modifier(modifier_node)
 
         return node

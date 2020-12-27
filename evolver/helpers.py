@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any, Callable, Optional, Sequence, List, Tuple
+from typing import Any, Callable, Union, Optional, Sequence, List, Tuple
 from math import log
 from random import random, sample
 import csv
