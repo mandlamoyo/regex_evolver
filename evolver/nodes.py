@@ -14,15 +14,18 @@ from typing import (
     Set,
 )
 
-from evolver.config import RAND, P_MODIFIER, P_EXTEND, SUPPRESS_ROOT_CHARS
 from evolver.exceptions import InvalidRegexError
 from evolver.helpers import first_nested
 from evolver.wrappers import RxWrapperSet, RxWrapper
 from evolver.types import RxTypeSet, RxType, CharSets
-
-
-NodeSpec = Mapping[str, Union[str, "NodeSpec", List["NodeSpec"]]]
-RxSpec = List[Union[str, "RxSpec", List["RxSpec"]]]
+from evolver.config import (
+    RAND,
+    P_MODIFIER,
+    P_EXTEND,
+    SUPPRESS_ROOT_CHARS,
+    NodeSpec,
+    RxSpec,
+)
 
 
 class RxNode:

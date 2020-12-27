@@ -1,5 +1,5 @@
 import string
-from typing import Union, Dict, List
+from typing import Mapping, Union, Sequence, Dict, List, Tuple
 
 
 ##### Parameters #####
@@ -55,6 +55,18 @@ SUPPRESS_ROOT_CHARS: bool = True
 # enables message output during evolution
 DISPLAY_MESSAGES: bool = True
 
+
+##### Types #####
+
+# User-centric succinct template for specifying regex components
+RxSpec = List[Union[str, "RxSpec", List["RxSpec"]]]
+
+# Intermediate verbose template used for generating nodes
+NodeSpec = Mapping[str, Union[str, "NodeSpec", List["NodeSpec"]]]
+
+# Dataset type definitions
+DatasetRow = Tuple[str, bool]
+Dataset = List[DatasetRow]
 
 ##### Constants #####
 RAND: int = -1

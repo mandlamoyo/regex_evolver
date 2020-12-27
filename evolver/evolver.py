@@ -1,11 +1,11 @@
 from random import random, randint, sample, choice
-from typing import Any, Sequence, Optional, List, Tuple
+from typing import Any, Iterable, Sequence, Optional, List, Tuple
 from math import log
 import string
 import csv
 import re
 
-from evolver.nodes import RxNodeSetFactory
+from evolver.nodes import RxNodeSetFactory, RxNodeSet
 from evolver.exceptions import NotFoundError
 
 from evolver.helpers import (
@@ -27,19 +27,22 @@ from evolver.config import (
     CHAR_SETS,
     RAND,
     MAX_WORDS,
+    DatasetRow,
+    Dataset,
+    RxSpec,
 )
 
-Dataset_Row = Tuple[str, bool]
-Dataset = Sequence[Dataset_Row]
+RankedNode = Tuple[float, RxNodeSet]
+RankedPop = Sequence[RankedNode]
 
 
 class RxEvolver:
     def __init__(self, dataset: Optional[Dataset] = None) -> None:
-        self._population: Sequence["RxNodeSet"] = []
-        self._dataset: Dataset = dataset
+        self._population: Sequence[RxNodeSet] = []
+        self._dataset: Dataset = dataset or []
         self._rxnode_set_factory: RxNodeSetFactory = RxNodeSetFactory()
 
-    def generate_population(self, size: Optional[int] = 10) -> None:
+    def generate_population(self, size: int = 10) -> None:
         self._population = [
             self._rxnode_set_factory.random_node_set() for _ in range(size)
         ]
@@ -47,12 +50,12 @@ class RxEvolver:
     def sample_dataset(self, size: int = None) -> List[Tuple[str, bool]]:
         return safe_sample(self._dataset, size)
 
-    def sample_population(self, size: int = None) -> List["RxNodeSet"]:
+    def sample_population(self, size: int = None) -> List[RxNodeSet]:
         return safe_sample(self._population, size)
 
     def score_func(
         self,
-        node_set: Optional["RxNodeSet"] = None,
+        node_set: Optional[RxNodeSet] = None,
         sample_size: Optional[int] = None,
         verbose: Optional[bool] = False,
         regex_string: Optional[str] = None,
@@ -85,57 +88,60 @@ class RxEvolver:
         return 1 - correct / len(dataset)
 
     def rank_population(
-        self, sample_size: Optional[int] = None, verbose: Optional[bool] = False
-    ) -> Sequence[Tuple[float, "RxNodeSet"]]:
-        population_sample = self.sample_population(sample_size)
-        scores = [
+        self, sample_size: Optional[int] = None, verbose: bool = False
+    ) -> RankedPop:
+        population_sample: Sequence[RxNodeSet] = self.sample_population(sample_size)
+        scores: RankedPop = [
             (self.score_func(node_set, verbose), node_set)
             for node_set in population_sample
         ]
         return sorted(scores, key=lambda s: s[0])
 
-    def print_population(self, lim: Optional[int] = 10) -> None:
+    def print_population(self, lim: int = 10) -> None:
         for i in range(len(self._population[:lim])):
             print(i, self._population[i], f":: {self._population[i].display()}")
         print()
 
     def evolve(
         self,
-        pop_size: Optional[int] = POP_SIZE,
-        max_gen: Optional[int] = MAX_GEN,
-        mutation_rate: Optional[float] = MUTATION_RATE,
-        crossover_rate: Optional[float] = CROSSOVER_RATE,
-        pexp: Optional[float] = P_EXP,
-        pnew_upper: Optional[float] = P_NEW_UPPER,
-        pnew_lower: Optional[float] = P_NEW_LOWER,
-        verbose: Optional[bool] = DISPLAY_MESSAGES,
-    ) -> "RxNodeSet":
+        pop_size: int = POP_SIZE,
+        max_gen: int = MAX_GEN,
+        mutation_rate: float = MUTATION_RATE,
+        crossover_rate: float = CROSSOVER_RATE,
+        pexp: float = P_EXP,
+        pnew_upper: float = P_NEW_UPPER,
+        pnew_lower: float = P_NEW_LOWER,
+        verbose: bool = DISPLAY_MESSAGES,
+    ) -> RxNodeSet:
+
         self.generate_population(pop_size)
-        pnew_dec = (pnew_upper - pnew_lower) / max_gen
-        pnew = pnew_upper
+        pnew_dec: float = (pnew_upper - pnew_lower) / max_gen
+        pnew: float = pnew_upper
 
         for i in range(max_gen):
-            scores = self.rank_population()
+            scores: RankedPop = self.rank_population()
             if verbose:
                 print(i, round(scores[0][0], 4), scores[0][1].display(), round(pnew, 4))
             if scores[0][0] == 0:
                 break
 
-            new_pop = [scores[0][1], scores[1][1]]
+            new_pop: List[RxNodeSet] = [scores[0][1], scores[1][1]]
 
             while len(new_pop) < pop_size:
                 if random() < pnew:
                     new_pop.append(self._rxnode_set_factory.random_node_set())
                 else:
-                    ixs = [select_index(len(self._population) - 1) for i in range(2)]
-                    crossed = scores[ixs[0]][1].crossover(
+                    ixs: List[int] = [
+                        select_index(len(self._population) - 1) for i in range(2)
+                    ]
+                    crossed: RxNodeSet = scores[ixs[0]][1].crossover(
                         scores[ixs[1]][1], crossover_rate
                     )
-                    mutated = crossed.mutate(mutation_rate)
+                    mutated: RxNodeSet = crossed.mutate(mutation_rate)
                     new_pop.append(mutated)
 
             if verbose:
-                new_scores = self.rank_population()
+                new_scores: RankedPop = self.rank_population()
                 for i in range(10):
                     print(
                         "> ", i, round(new_scores[i][0], 4), new_scores[i][1].display()
@@ -159,76 +165,81 @@ class RxEvolver:
 
 
 class RxDataGen:
-    def __init__(self, settings=None):
+    def __init__(self, settings: Optional[dict] = None) -> None:
         self._rxnode_set_factory: RxNodeSetFactory = RxNodeSetFactory()
-        self._data_settings = settings
-        self._dataset = []
+        self._settings: Optional[dict] = settings
+        self._dataset: Dataset = []
 
-    def export(self):
+    def export(self) -> Dataset:
         return self._dataset
 
-    def reset(self):
+    def reset(self) -> None:
         self._dataset = []
 
-    def apply_settings(self, settings):
-        self._data_settings = settings
+    def apply_settings(self, settings: dict):
+        self._settings = settings
 
     def load_data(
         self,
-        dataset: Optional[Sequence[Tuple[str, bool]]] = None,
         filepath: Optional[str] = None,
-        delimiter: Optional[str] = ",",
-        quotechar: Optional[str] = "|",
+        delimiter: str = ",",
+        quotechar: str = "|",
     ) -> None:
-        if not dataset:
-            if not filepath:
-                raise ValueError("must provide dataset or filepath")
 
-            dataset = []
-            with open(filepath, newline="") as f:
-                csvreader = csv.reader(f, delimiter=delimiter, quotechar=quotechar)
-                for row in csvreader:
-                    dataset.append((row[0], row[1].strip().lower() in ["true", "t"]))
+        if not filepath:
+            raise ValueError("must provide filepath")
+
+        dataset: Dataset = []
+        with open(filepath, newline="") as f:
+            csvreader = csv.reader(f, delimiter=delimiter, quotechar=quotechar)
+            for row in csvreader:
+                dataset.append((row[0], row[1].strip().lower() in ["true", "t"]))
 
         self._dataset.extend(dataset)
 
-    def gen_test_match(self, regex, char_sets=None, max_tries=10):
-        match_found = False
-        count = 0
+    def gen_test_match(
+        self,
+        regex: RxSpec,
+        max_tries: int = 10,
+        char_sets: Optional[Iterable[str]] = None,
+    ) -> str:
+        match_found: bool = False
+        count: int = 0
         while not match_found:
 
-            node_set = self._rxnode_set_factory.make_node_set(regex)
-            formatted = node_set.display()
-            res = node_set.compile()
-            if res and check_match(formatted, res):
+            node_set: RxNodeSet = self._rxnode_set_factory.make_node_set(regex)
+            node_regex: str = node_set.display()
+            node_output: Optional[str] = node_set.compile()
+            if node_output and check_match(node_regex, node_output):
                 match_found = True
             if count > max_tries:
-                raise NotFoundError(f"Could not compile match for regex '{formatted}'")
+                raise NotFoundError(f"Could not compile match for regex '{node_regex}'")
             count += 1
 
-        return res
+        return node_output
 
     def gen_test_no_match(
         self,
-        prob_alphanum=None,
-        prob_data_format=None,
-        data_format=None,
-        char_sets=None,
-    ):
+        prob_alphanum: Optional[float] = None,
+        prob_data_format: Optional[float] = None,
+        data_format: Optional[dict] = None,
+        char_sets: Optional[Sequence[str]] = None,
+    ) -> str:
 
         prob_alphanum = prob_alphanum or 0.5
         prob_data_format = prob_data_format or 0.5
 
         if not data_format:
             prob_data_format = 0
+            data_format = {}
 
-        if char_sets == RAND:
+        if not char_sets:
             char_sets = list(CHAR_SETS.keys())
 
-        use_data_format = random() < prob_data_format
-        num_words = select_index(MAX_WORDS) + 1
+        use_data_format: bool = random() < prob_data_format
+        num_words: int = select_index(MAX_WORDS) + 1
         if random() < prob_alphanum:
-            char_set_name = "alphanum"
+            char_set_name: str = "alphanum"
         else:
             char_set_name = choice(char_sets)
 
@@ -238,11 +249,11 @@ class RxDataGen:
                 callable_get(data_format.get("char_set", None)) or char_set_name
             )
 
-        char_set = CHAR_SETS[char_set_name]
-        res = []
+        char_set: str = CHAR_SETS[char_set_name]
+        res: List[str] = []
 
         for i in range(num_words):
-            num_chars = select_index(10) + 1
+            num_chars: int = select_index(10) + 1
             if use_data_format:
                 num_chars = (
                     callable_get(data_format.get("word_length", None), i) or num_chars
@@ -252,13 +263,18 @@ class RxDataGen:
         return " ".join(res)
 
     def gen_test_datum(
-        self, regex, data_format=None, probabilities=None, char_sets=RAND
-    ):
+        self,
+        regex: RxSpec,
+        data_format: Optional[dict] = None,
+        probabilities: Optional[dict] = None,
+        char_sets: Optional[Sequence[str]] = None,
+    ) -> DatasetRow:
 
-        verification_node_set = self._rxnode_set_factory.make_node_set(regex)
+        verification_node_set: RxNodeSet = self._rxnode_set_factory.make_node_set(regex)
+        probabilities = probabilities or {}
 
         if random() < probabilities.get("match", 0.5):
-            res = self.gen_test_match(regex)
+            res: str = self.gen_test_match(regex)
         else:
             res = self.gen_test_no_match(
                 probabilities.get("alphanum"),
@@ -267,16 +283,21 @@ class RxDataGen:
                 char_sets,
             )
 
-        is_match = check_match(verification_node_set.display(), res)
+        is_match: bool = check_match(verification_node_set.display(), res)
         return (res, is_match)
 
     def gen_test_data(
-        self, regex, rows=10, data_format=None, probabilities=None, char_sets=RAND
-    ):
+        self,
+        regex: RxSpec,
+        rows: int = 10,
+        data_format: Optional[dict] = None,
+        probabilities: Optional[dict] = None,
+        char_sets: Optional[Sequence[str]] = None,
+    ) -> Dataset:
         return [
             self.gen_test_datum(regex, data_format, probabilities, char_sets=char_sets)
             for i in range(rows)
         ]
 
-    def get_pct_data_correct(self):
+    def get_pct_data_correct(self) -> float:
         return sum([1 for row in self._dataset if row[1]]) / len(self._dataset)
