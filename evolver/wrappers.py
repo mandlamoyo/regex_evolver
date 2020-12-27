@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Callable, Optional, Iterable, Dict, List
 
-from evolver.types import RxType, CharSets
+from evolver.types import RxType, RxTypeSet, CharSets
 from evolver.wrapper_functions import *
 from evolver.helpers import _d
 from evolver.config import (
@@ -10,9 +10,9 @@ from evolver.config import (
     CHAR_SETS,
     META_CHARS,
     NON_META_SYMBOL_CHARS,
+    RXWRAPPER_SETTINGS,
+    RXWRAPPER_SYMBOL_KEY,
 )
-
-char_sets = CharSets.instance()
 
 
 class RxWrapper:
@@ -20,137 +20,17 @@ class RxWrapper:
     The templates that define the various components of which regexes consist.
     """
 
-    wrappers: Dict[str, RxWrapper] = {}
-
-    @staticmethod
-    def add_wrapper(regex_wrapper: RxWrapper) -> None:
-        RxWrapper.wrappers[regex_wrapper.name] = regex_wrapper
-
-    @staticmethod
-    def add_wrappers(regex_wrappers: Iterable[RxWrapper]) -> None:
-        for wrapper in regex_wrappers:
-            RxWrapper.add_wrapper(wrapper)
-
-    @staticmethod
-    def get_wrapper(wrapper_name: str) -> RxWrapper:
-        return RxWrapper.wrappers.get(wrapper_name, None)
-
-    @staticmethod
-    def wrapper_is_type(wrapper_name: str, type_name: str) -> bool:
-        wrapper: RxWrapper = RxWrapper.get_wrapper(wrapper_name)
-        if not wrapper:
-            raise KeyError(f"wrapper {wrapper_name} not found")
-        return wrapper.rxtype.is_type_name(type_name)
-
-    @staticmethod
-    def init_wrappers(printable_subset: Optional[Iterable[str]] = None) -> None:
-        if not printable_subset:
-            printable_subset = CHAR_SETS.keys()
-        printable_subset = set(printable_subset)
-
-        # clear containers
-        RxWrapper.wrappers.clear()
-        char_sets.empty_sets()
-
-        char_sets.init_char_set("digit", RxWrapper, printable_subset)
-        char_sets.init_char_set(
-            "alpha_upper", RxWrapper, printable_subset, label="alpha"
-        )
-        char_sets.init_char_set(
-            "alpha_lower", RxWrapper, printable_subset, label="alpha"
-        )
-        char_sets.init_char_set(
-            "printable", RxWrapper, printable_subset, char_set=NON_META_SYMBOL_CHARS
-        )
-        char_sets.init_char_set(
-            "printable",
-            RxWrapper,
-            printable_subset,
-            char_set=META_CHARS,
-            display_func_generator=lambda m: _d(r"\%s" % m),
-            compile_function=_d,
-        )
-
-        for n in CHAR_SETS["digit"]:
-            RxWrapper.add_wrapper(RxWrapper(f"int({n})", _d(n), "integer"))
-
-        RxWrapper.add_wrappers(
-            [
-                RxWrapper(
-                    "range",
-                    d_range,
-                    "range",
-                    ["digit", "alpha_upper", "alpha_lower"],
-                    2,
-                    compile_function=c_range,
-                    strip_child_mods=True,
-                    uniform_child_types=True,
-                ),
-                RxWrapper(
-                    "set",
-                    d_set,
-                    "re",
-                    ["printable", "range", "cset"],
-                    RAND,
-                    compile_function=c_set,
-                    strip_child_mods=True,
-                ),
-                RxWrapper(
-                    "!set",
-                    d_nset,
-                    "re",
-                    ["printable", "range", "cset"],
-                    RAND,
-                    compile_function=c_nset,
-                    strip_child_mods=True,
-                ),
-                RxWrapper(
-                    "count", d_count, "mod", ["integer"], 1, compile_function=c_count
-                ),
-                RxWrapper(
-                    "count2", d_count2, "mod", ["integer"], 2, compile_function=c_count2
-                ),
-                RxWrapper(
-                    "or",
-                    d_or,
-                    "re",
-                    ["re"],
-                    2,
-                    compile_function=c_or,
-                    is_modifiable=False,
-                ),
-                RxWrapper("wildcard", _d("."), "re", compile_function=c_wildcard),
-                RxWrapper("0+", _d("*"), "mod", compile_function=c_zero_plus),
-                RxWrapper("0/1", _d("?"), "mod", compile_function=c_zero_one),
-                RxWrapper("1+", _d("+"), "mod", compile_function=c_one_plus),
-                RxWrapper("!greedy", _d("?"), "mmod", compile_function=c_not_greedy),
-                RxWrapper(
-                    "whitespace", _d(r"\s"), "cset", compile_function=c_whitespace
-                ),
-                RxWrapper(
-                    "!whitespace", _d(r"\S"), "cset", compile_function=c_nwhitespace
-                ),
-                RxWrapper("emptyterm", _d(r"\b"), "cset*", compile_function=c_empty),
-                RxWrapper("emtpy!term", _d(r"\B"), "cset*", compile_function=c_empty),
-                RxWrapper("digit", _d(r"\d"), "cset", compile_function=c_digit),
-                RxWrapper("!digit", _d(r"\D"), "cset", compile_function=c_ndigit),
-                RxWrapper("word", _d(r"\w"), "cset", compile_function=c_word),
-                RxWrapper("!word", _d(r"\W"), "cset", compile_function=c_nword),
-                RxWrapper("space", _d(r" "), "printable"),
-            ]
-        )
-
     def __init__(
         self,
         name: str,
         display_function: Callable[..., str],
-        rxtype_name: str,
-        child_types: Optional[List[str]] = None,
-        child_count: Optional[int] = 0,
+        rxtype: RxType,
+        child_types: Optional[Sequence[str]] = None,
+        child_count: int = 0,
         is_modifiable: Optional[bool] = True,
         compile_function: Optional[Callable[..., str]] = None,
-        strip_child_mods: Optional[bool] = False,
-        uniform_child_types: Optional[bool] = False,
+        strip_child_mods: bool = False,
+        uniform_child_types: bool = False,
     ) -> None:
         """
         Instantiates a wrapper that defines a particular regex component.
@@ -172,7 +52,7 @@ class RxWrapper:
         self.compile_function = compile_function or display_function
         self.child_count = child_count
         self.child_types = child_types
-        self.rxtype = RxType.get_type(rxtype_name)
+        self.rxtype = rxtype
         self.is_modifiable = self.rxtype.is_modifiable and is_modifiable
         self.strip_child_mods = strip_child_mods
         self.uniform_child_types = uniform_child_types
@@ -184,3 +64,94 @@ class RxWrapper:
         if self.child_count == RAND:
             return randint(1, MAX_CHILDREN)
         return self.child_count
+
+
+class RxWrapperSet:
+    def __init__(
+        self, char_sets: CharSets, printable_subset: Optional[Iterable[str]] = None
+    ) -> None:
+        self._wrappers: Dict[str, RxWrapper] = {}
+        self._char_sets: CharSets = char_sets
+        self._rxtypes: RxTypeSet = char_sets.rxtypes()
+        self.init_wrappers(printable_subset)
+
+    def __getitem__(self, key: str) -> RxWrapper:
+        return self._wrappers[key]
+
+    def all(self) -> Tuple[RxWrapper]:
+        return tuple(self._wrappers.values())
+
+    def add(self, rxwrapper: RxWrapper) -> None:
+        self._wrappers[rxwrapper.name] = rxwrapper
+
+    def wrapper_is_type(self, rxwrapper_name: str, rxtype_name: str) -> bool:
+        wrapper: RxWrapper = self._wrappers[rxwrapper_name]
+        return wrapper.rxtype.is_type_name(rxtype_name)
+
+    def create_wrapper(
+        self,
+        name: str,
+        rxtype_name: str,
+        child_types: Optional[Sequence[str]] = None,
+        child_count: Optional[int] = None,
+        is_modifiable: Optional[bool] = None,
+        strip_child_mods: Optional[bool] = None,
+        uniform_child_types: Optional[bool] = None,
+        compile_function_name: Optional[str] = None,
+        display_function_name: Optional[str] = None,
+        is_char_set: bool = False,
+        display_value: Optional[str] = None,
+        char_value: Optional[str] = None,
+        char_set: Optional[Iterable[str]] = None,
+    ) -> RxWrapper:
+        func_name = "".join([RXWRAPPER_SYMBOL_KEY.get(c, c) for c in name])
+
+        display_value = display_value or char_value
+        if display_value:
+            display_value = display_value.format(char_value)
+
+        rxtype = self._rxtypes[rxtype_name]
+
+        display_function = rxwrapper_functions["display"].get(
+            display_function_name or func_name, _d(display_value)
+        )
+        compile_function = rxwrapper_functions["compile"].get(
+            compile_function_name or func_name, _d(display_value)
+        )
+
+        if is_char_set:
+            name = f"{name}({char_value})"
+
+        return RxWrapper(
+            name,
+            display_function,
+            rxtype,
+            child_types,
+            child_count,
+            is_modifiable,
+            compile_function,
+            strip_child_mods,
+            uniform_child_types,
+        )
+
+    def init_wrappers(self, printable_subset: Optional[Iterable[str]] = None) -> None:
+        if not printable_subset:
+            printable_subset = CHAR_SETS.keys()
+        printable_subset = set(printable_subset)
+
+        # clear containers
+        self._wrappers.clear()
+        self._char_sets.empty_sets()
+
+        for settings in RXWRAPPER_SETTINGS:
+            if settings["is_char_set"]:
+                char_set = settings.get("char_set", CHAR_SETS[settings["name"]])
+                self._char_sets.init_char_set(
+                    settings["name"], printable_subset, char_set
+                )
+                for char in char_set:
+                    settings["char_value"] = char
+                    self.add(self.create_wrapper(**settings))
+
+            else:
+                self.add(self.create_wrapper(**settings))

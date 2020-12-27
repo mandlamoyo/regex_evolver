@@ -1,46 +1,40 @@
 from __future__ import annotations
-from typing import Optional, Sequence
+from typing import Any, Callable, Optional, Sequence, List, Tuple
+from math import log
+from random import random, sample
+import csv
+import re
 
 
-def _d(value: str):
-    return lambda: value
+def _d(value: str) -> Callable[[Any], str]:
+    return lambda node: value
 
 
-# https://stackoverflow.com/a/7346105
-class Singleton:
-    """
-    A non-thread-safe helper class to ease implementing singletons.
-    This should be used as a decorator -- not a metaclass -- to the
-    class that should be a singleton.
+def first_nested(values: Union[Any, List[Any]]):
+    if not values:
+        raise ValueError("list is empty")
 
-    The decorated class can define one `__init__` function that
-    takes only the `self` argument. Also, the decorated class cannot be
-    inherited from. Other than that, there are no restrictions that apply
-    to the decorated class.
+    if isinstance(values, list):
+        return first_nested(values[0])
+    return values
 
-    To get the singleton instance, use the `instance` method. Trying
-    to use `__call__` will result in a `TypeError` being raised.
 
-    """
+def select_index(limit: int, pexp: float = 0.7) -> int:
+    return min(int(log(random()) / log(pexp)), limit)
 
-    def __init__(self, decorated):
-        self._decorated = decorated
 
-    def instance(self):
-        """
-        Returns the singleton instance. Upon its first call, it creates a
-        new instance of the decorated class and calls its `__init__` method.
-        On all subsequent calls, the already created instance is returned.
+def check_match(pattern: str, comparator: str) -> bool:
+    m = re.fullmatch(pattern, comparator)
+    return m is not None
 
-        """
-        try:
-            return self._instance
-        except AttributeError:
-            self._instance = self._decorated()
-            return self._instance
 
-    def __call__(self):
-        raise TypeError("Singletons must be accessed through `instance()`.")
+def callable_get(obj, *args):
+    if callable(obj):
+        return obj(*args)
+    return obj
 
-    def __instancecheck__(self, inst):
-        return isinstance(inst, self._decorated)
+
+def safe_sample(collection: Sequence[Any], size: Optional[int] = None) -> Sequence[Any]:
+    if size and size <= len(collection):
+        return sample(collection, size)
+    return collection
