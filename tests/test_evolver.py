@@ -5,7 +5,24 @@ from evolver.helpers import check_match
 
 
 class TestRxEvolver(unittest.TestCase):
-    pass
+    def test_generate_population(self):
+        pass
+
+    def test_sample_dataset(self):
+        pass
+
+    def test_sample_population(self):
+        pass
+
+    def test_score_func(self):
+        pass
+
+    def test_rank_population(self):
+        pass
+
+    def test_evolve(self):
+        # If possible
+        pass
 
 
 class TestRxDataGen(unittest.TestCase):
@@ -31,4 +48,7 @@ class TestRxDataGen(unittest.TestCase):
         self.assertRegex(result, self.regex)
 
     def test_gen_test_no_match(self):
+        pass
+
+    def test_pct_data_correct(self):
         pass

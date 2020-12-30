@@ -232,6 +232,10 @@ class TestRxWrapperSet(unittest.TestCase):
         self.assertEqual(wrapper.name, "digit(5)")
 
     def test_init_wrappers(self):
+        wrappers = RxWrapperSet(self.char_sets, init_wrappers=False)
+        wrappers.init_wrappers()
+        # print(wrappers._char_sets._char_sets)
+        # print(wrappers._wrappers)
         self.assertTrue(False)
 
     def test_init_wrappers_printable_subset(self):

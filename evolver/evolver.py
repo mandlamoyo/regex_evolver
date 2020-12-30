@@ -315,3 +315,13 @@ if __name__ == "__main__":
     evolver = RxEvolver(data_gen.generate())
     print("pct data correct: ", data_gen.get_pct_data_correct())
     evolver.evolve()
+
+    # Utilities
+
+    # run evolution
+
+    # generate dataset
+
+    # optimise hyperparameters
+
+    # parse regex
