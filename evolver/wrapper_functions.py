@@ -26,9 +26,7 @@ def set_choice(values: Set[str]) -> str:
     return choice(tuple(values))
 
 
-def invert_set(
-    node, char_set: Set[str], from_set: Optional[str] = "printable"
-) -> Set[str]:
+def invert_set(node, char_set: Set[str], from_set: str = "printable") -> Set[str]:
     """
     Given a character set and the name of a character group, returns the characters
     in the group that do not appear in the provided set.
@@ -42,7 +40,7 @@ def expand_set(node: "RxNode") -> Set[str]:
     """
     Returns a set of all the characters that are matched by a given regex node.
     """
-    char_set = Set()
+    char_set = set()
 
     # If the node is a range, add all the values between
     # the children specifying the boundary characters
@@ -74,12 +72,12 @@ def expand_set(node: "RxNode") -> Set[str]:
     return set(char_set)
 
 
-def expand_sets(child_nodes: Sequence["RxNode"]) -> Set[str]:
+def expand_sets(children: Sequence["RxNode"]) -> Set[str]:
     """
     Expands the set of characters that are matched by a series of regex nodes.
     """
-    values: Set[str] = Set()
-    for child in child_nodes:
+    values: Set[str] = set()
+    for child in children:
         values |= expand_set(child)
     return values
 
@@ -96,62 +94,60 @@ def escape_nonrange_hyphen(displayed: str) -> str:
 # Regex wrapper display functions
 def d_set(
     node: "RxNode",
-    child_nodes: Sequence["RxNode"],
-    invert: Optional[bool] = False,
+    invert: bool = False,
 ) -> str:
     display = "".join(
-        [escape_nonrange_hyphen(child.display()) for child in child_nodes]
+        [escape_nonrange_hyphen(child.display()) for child in node.children]
     )
     if invert:
         display = "^" + display
     return f"[{display}]"
 
 
-def d_nset(node: "RxNode", child_nodes: Sequence["RxNode"]) -> str:
-    return d_set(node, child_nodes, invert=True)
+def d_nset(node: "RxNode") -> str:
+    return d_set(node, invert=True)
 
 
-def d_count(node: "RxNode", child_nodes: Sequence["RxNode"]) -> str:
-    return "{" + child_nodes[0].display() + "}"
+def d_count(node: "RxNode") -> str:
+    return "{" + node.children[0].display() + "}"
 
 
-def d_count2(node: "RxNode", child_nodes: Sequence["RxNode"]) -> str:
-    values = sorted([child_nodes[0].display(), child_nodes[1].display()])
+def d_count2(node: "RxNode") -> str:
+    values = sorted([node.children[0].display(), node.children[1].display()])
     return "{" + values[0] + "," + values[1] + "}"
 
 
-def d_or(node: "RxNode", child_nodes: Sequence["RxNode"]) -> str:
-    return "(" + child_nodes[0].display() + "|" + child_nodes[1].display() + ")"
+def d_or(node: "RxNode") -> str:
+    return "(" + node.children[0].display() + "|" + node.children[1].display() + ")"
 
 
-def d_range(node: "RxNode", child_nodes: Sequence["RxNode"]) -> str:
-    values = sorted([child_nodes[0].display(), child_nodes[1].display()])
+def d_range(node: "RxNode") -> str:
+    values = sorted([node.children[0].display(), node.children[1].display()])
     return f"{values[0]}-{values[1]}"
 
 
 # Regex wrapper compilation functions
 
 
-def c_set(node: "RxNode", child_nodes: Sequence["RxNode"]) -> str:
-    char_set = expand_sets(child_nodes)
+def c_set(node: "RxNode", invert: bool = False) -> str:
+    char_set = expand_sets(node.children)
+    if invert:
+        char_set = invert_set(node, char_set)
     if not char_set:
-        raise InvalidRegexError(f"Invalid set ({child_nodes})")
+        raise InvalidRegexError(f"Invalid set ({node.children})")
     return set_choice(char_set)
 
 
-def c_nset(node: "RxNode", child_nodes: Sequence["RxNode"]) -> str:
-    char_set = invert_set(node, expand_sets(child_nodes))
-    if not char_set:
-        raise InvalidRegexError(f"Invalid set inversion ({child_nodes})")
-    return set_choice(char_set)
+def c_nset(node: "RxNode") -> str:
+    return c_set(node, invert=True)
 
 
-def c_or(node: "RxNode", child_nodes: Sequence["RxNode"]) -> str:
-    return choice([child.compile() for child in child_nodes])
+def c_or(node: "RxNode") -> str:
+    return choice([child.compile() for child in node.children])
 
 
-def c_range(node: "RxNode", child_nodes: Sequence["RxNode"]) -> str:
-    return chr(randint(*sorted([ord(child.compile()) for child in child_nodes])))
+def c_range(node: "RxNode") -> str:
+    return chr(randint(*sorted([ord(child.compile()) for child in node.children])))
 
 
 def c_wildcard(node: "RxNode") -> str:
@@ -161,12 +157,14 @@ def c_wildcard(node: "RxNode") -> str:
 
 
 ## Modifiers
-def c_count(node: "RxNode", child_nodes: Sequence["RxNode"], compiled: str) -> str:
-    return compiled * int(child_nodes[0].compile())
+def c_count(node: "RxNode", compiled: str) -> str:
+    return compiled * int(node.children[0].compile())
 
 
-def c_count2(node: "RxNode", child_nodes: Sequence["RxNode"], compiled: str) -> str:
-    return compiled * randint(*sorted([int(child.compile()) for child in child_nodes]))
+def c_count2(node: "RxNode", compiled: str) -> str:
+    return compiled * randint(
+        *sorted([int(child.compile()) for child in node.children])
+    )
 
 
 def c_zero_plus(node: "RxNode", compiled: str) -> str:

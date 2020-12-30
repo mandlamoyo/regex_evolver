@@ -16,8 +16,8 @@ from typing import (
 
 from evolver.exceptions import InvalidRegexError
 from evolver.helpers import first_nested
-from evolver.wrappers import RxWrapperSet, RxWrapper
 from evolver.types import RxTypeSet, RxType, CharSets
+from evolver.wrappers import RxWrapperSet, RxWrapper
 from evolver.config import (
     RAND,
     P_MODIFIER,
@@ -31,22 +31,22 @@ from evolver.config import (
 class RxNode:
     def __init__(
         self,
-        char_set: CharSets,
+        char_sets: CharSets,
         wrapper: RxWrapper,
-        children: Sequence[RxNode],
-        is_child: bool,
+        children: Optional[Sequence[RxNode]] = None,
+        is_child: Optional[bool] = None,
     ) -> None:
         self.name: str = wrapper.name
         self.modifier: Optional[RxNode] = None
         self.assertion: Optional[RxNode] = None
-        self.children: Sequence[RxNode] = children
+        self.children: Sequence[RxNode] = children or []
         self.rxtype: RxType = wrapper.rxtype
         self.display_function: Callable = wrapper.display_function
         self.compile_function: Callable = wrapper.compile_function
-        self.is_child: bool = is_child
+        self.is_child: bool = is_child or False
         self.strip_child_mods: bool = wrapper.strip_child_mods
         self.strip_mod: bool = False
-        self.char_sets: CharSets = char_set
+        self.char_sets: CharSets = char_sets
 
         for child in self.children:
             if self.strip_child_mods:
@@ -72,11 +72,7 @@ class RxNode:
         if self.assertion and not self.strip_mod:
             out += self.assertion.display()
 
-        if self.children:
-            out += self.display_function(self, self.children)
-
-        else:
-            out += self.display_function(self)
+        out += self.display_function(self)
         # print('- ', self.name, self.rxtype)
 
         if self.modifier and not self.strip_mod:
@@ -90,9 +86,6 @@ class RxNode:
         compiled_children: Optional[List[str]] = None,
     ) -> str:
         args: list = [self]
-
-        if self.children:
-            args.append(self.children)
 
         if self.rxtype.is_type_name("mod"):
             args.append(compiled_node)
@@ -124,7 +117,7 @@ class RxNode:
 
 
 class RxNodeFactory:
-    def __init__(self, printable_subset: Optional[Iterable[str]]) -> None:
+    def __init__(self, printable_subset: Optional[Iterable[str]] = None) -> None:
         self.omit_types: Set[str] = set()
         self.omit_wrappers: Set[str] = set()
         self._rxtypes = RxTypeSet()
@@ -377,6 +370,7 @@ class RxNodeSetFactory:
         node_specs: List[NodeSpec] = [
             self.node_factory.parse_rxspec(rxspec) for rxspec in regex_specification
         ]
+
         return RxNodeSet(
             [self.node_factory.make_node(**spec) for spec in node_specs],
             self.node_factory,

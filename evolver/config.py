@@ -73,7 +73,7 @@ RAND: int = -1
 
 # character sets
 WHITESPACE_CHARS: str = string.whitespace  # [" ", "\t", "\n", "\r", "\f", "\v"]
-NON_META_SYMBOL_CHARS: str = "'!\"£-~#%&@:;<>/,"
+PUNCTUATION_CHARS: str = "'!\"£-~#%&@:;<>/,=_`"
 META_CHARS: str = r".^$*+?{}[]\|()\\"
 CHAR_SETS: Dict[str, str] = {
     "alpha_upper": string.ascii_uppercase,
@@ -81,8 +81,13 @@ CHAR_SETS: Dict[str, str] = {
     "alpha": string.ascii_letters,
     "alphanum": string.digits + string.ascii_letters,
     "digit": string.digits,
-    "printable": string.printable,
+    "meta": META_CHARS,
+    "punctuation": PUNCTUATION_CHARS,
 }
+
+CHAR_SETS["printable"] = "".join(
+    [char_set for char_set in set("".join([value for value in CHAR_SETS.values()]))]
+)
 
 # RxWrapper settings
 SettingInstance = Dict[str, Union[int, str, bool, List[str]]]
@@ -98,11 +103,13 @@ RXWRAPPER_SYMBOL_KEY: Dict[str, str] = {
 RXTYPE_SETTINGS: List[dict] = [
     {"name": "re"},
     {"name": "mod"},
-    {"name": "integer", "is_modifiable": False},
     {"name": "range", "is_modifiable": False},
+    {"name": "integer", "is_modifiable": False},
     {"name": "cset", "parent_name": "re"},
     {"name": "cset*", "parent_name": "re"},
     {"name": "printable", "parent_name": "re"},
+    {"name": "punctuation", "parent_name": "printable"},
+    {"name": "meta", "parent_name": "punctuation"},
     {"name": "alphanum", "parent_name": "printable"},
     {"name": "digit", "parent_name": "alphanum"},
     {"name": "alpha", "parent_name": "alphanum"},
@@ -141,14 +148,14 @@ RXWRAPPER_SETTINGS: List[dict] = [
     },
     {
         "name": "printable",
+        "rxtype_name": "punctuation",
         "is_char_set": True,
-        "char_set": NON_META_SYMBOL_CHARS,
     },
     {
         "name": "printable",
+        "rxtype_name": "meta",
         "display_value": r"\{}",
         "is_char_set": True,
-        "char_set": META_CHARS,
     },
     {
         "name": "int",
@@ -237,12 +244,13 @@ RXWRAPPER_SETTINGS: List[dict] = [
         "name": "emptyterm",
         "display_value": r"\b",
         "rxtype_name": "cset*",
+        "compile_function_name": "empty",
     },
     {
         "name": "empty!term",
         "display_value": r"\B",
         "rxtype_name": "cset*",
-        "compile_function_name": "emptyterm",
+        "compile_function_name": "empty",
     },
     {
         "name": "digit",

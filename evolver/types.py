@@ -49,8 +49,10 @@ class RxType:
 
 
 class RxTypeSet:
-    def __init__(self):
+    def __init__(self, init_types: bool = True):
         self._types: Dict[str, RxType] = {}
+        if init_types:
+            self.init_types()
 
     def __getitem__(self, key: str) -> RxType:
         return self._types[key]
@@ -97,7 +99,7 @@ class RxTypeSet:
                 RxType(
                     name=settings["name"],
                     parent_rxtype=self._types.get(settings.get("parent_name")),
-                    is_modifiable=settings.get("is_modifiable"),
+                    is_modifiable=settings.get("is_modifiable", True),
                 )
             )
 
@@ -127,8 +129,8 @@ class CharSets:
     def init_char_set(
         self,
         type_name: str,
-        char_set: Iterable[str],
         printable_subset: Set[str],
+        char_set: str,
     ) -> None:
         """
         Activates a set of characters, including functions for their display and compilation.
@@ -136,14 +138,14 @@ class CharSets:
         Parameters
         ----------
         `type_name`:
-            The name of the character set to activate (as outlined in the `CHAR_SETS` constant in `config.py`)
+            The name of the character set being activated (as outlined in the `CHAR_SETS` constant in `config.py`)
 
         `printable_subset`:
             Specifies which subgroup of characters the character set `type_name` should be restricted to.
             Available subgroups are outlined in the `CHAR_SETS` constant in `config.py`,
             and the relationships between them are outlined in `RxType.init_types()`.
 
-            e.g. if `type_name` is `alphanum` and `printable_subset` is `{'num', 'alpha_upper'}`,
+            e.g. if `type_name` is `alphanum` and `printable_subset` is `{'digit', 'alpha_upper'}`,
             lower case letters will be excluded.
 
         `char_set`:
@@ -152,8 +154,10 @@ class CharSets:
         """
         type_names = set(self._rxtypes.get_full_type_names(type_name))
 
+        # if type name is in printable subset, add characters from char set
+        # into the relevant character containers.
         if type_names & printable_subset:
-            for s in char_set:
+            for char in char_set:
                 for name in type_names:
                     if name in self._char_sets:
-                        self._char_sets[name].add(s)
+                        self._char_sets[name].add(char)

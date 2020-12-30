@@ -13,11 +13,13 @@ from evolver.helpers import (
     select_index,
     check_match,
     callable_get,
+    postcode_test_data_settings,
 )
 
 from evolver.config import (
-    POP_SIZE,
     MAX_GEN,
+    POP_SIZE,
+    SIZE_DATASET,
     MUTATION_RATE,
     CROSSOVER_RATE,
     P_EXP,
@@ -201,7 +203,6 @@ class RxDataGen:
         self,
         regex: RxSpec,
         max_tries: int = 10,
-        char_sets: Optional[Iterable[str]] = None,
     ) -> str:
         match_found: bool = False
         count: int = 0
@@ -299,5 +300,18 @@ class RxDataGen:
             for i in range(rows)
         ]
 
+    def generate(self):
+        if self._settings:
+            return self.gen_test_data(**self._settings)
+        return None  # should raise error
+
     def get_pct_data_correct(self) -> float:
         return sum([1 for row in self._dataset if row[1]]) / len(self._dataset)
+
+
+if __name__ == "__main__":
+    test_data_settings = postcode_test_data_settings(SIZE_DATASET)
+    data_gen = RxDataGen(test_data_settings)
+    evolver = RxEvolver(data_gen.generate())
+    print("pct data correct: ", data_gen.get_pct_data_correct())
+    evolver.evolve()
